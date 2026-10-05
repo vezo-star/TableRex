@@ -10,8 +10,11 @@
 name: bookingplatform-stack
 
 # The migrator connects as the owner; the Api and Worker as the least-privilege role it provisions (APP_DB_USER).
+# Pool caps (summed over every Api/Worker instance) must stay below PostgreSQL max_connections (default 100) minus
+# its reserved slots, or bursts get "53300 remaining connection slots" instead of queueing for a pooled connection.
 x-postgres-owner: &postgres-owner-connection "Host=postgres;Port=5432;Database=${POSTGRES_DB:-bookingplatform};Username=${POSTGRES_USER:-bookingplatform};Password=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}"
-x-postgres: &postgres-connection "Host=postgres;Port=5432;Database=${POSTGRES_DB:-bookingplatform};Username=${APP_DB_USER:-bookingplatform_app};Password=${APP_DB_PASSWORD:?Set APP_DB_PASSWORD}"
+x-postgres-api: &postgres-api-connection "Host=postgres;Port=5432;Database=${POSTGRES_DB:-bookingplatform};Username=${APP_DB_USER:-bookingplatform_app};Password=${APP_DB_PASSWORD:?Set APP_DB_PASSWORD};Maximum Pool Size=${API_DB_MAX_POOL_SIZE:-50}"
+x-postgres-worker: &postgres-worker-connection "Host=postgres;Port=5432;Database=${POSTGRES_DB:-bookingplatform};Username=${APP_DB_USER:-bookingplatform_app};Password=${APP_DB_PASSWORD:?Set APP_DB_PASSWORD};Maximum Pool Size=${WORKER_DB_MAX_POOL_SIZE:-10}"
 x-redis: &redis-connection "redis:6379,password=${REDIS_PASSWORD:?Set REDIS_PASSWORD},abortConnect=false"
 
 services:
@@ -73,7 +76,7 @@ services:
       - /tmp
     environment:
       ASPNETCORE_ENVIRONMENT: Production
-      ConnectionStrings__Postgres: *postgres-connection
+      ConnectionStrings__Postgres: *postgres-api-connection
       ConnectionStrings__Redis: *redis-connection
       Jwt__SigningKey: ${JWT_SIGNING_KEY:?Set JWT_SIGNING_KEY}
       PublicBooking__TokenKey: ${PUBLIC_BOOKING_TOKEN_KEY:?Set PUBLIC_BOOKING_TOKEN_KEY}
@@ -99,7 +102,7 @@ services:
     stop_grace_period: 35s
     environment:
       DOTNET_ENVIRONMENT: Production
-      ConnectionStrings__Postgres: *postgres-connection
+      ConnectionStrings__Postgres: *postgres-worker-connection
       ConnectionStrings__Redis: *redis-connection
       PublicBooking__TokenKey: ${PUBLIC_BOOKING_TOKEN_KEY:?Set PUBLIC_BOOKING_TOKEN_KEY}
       Notifications__PublicBaseUrl: ${PUBLIC_BASE_URL:?Set PUBLIC_BASE_URL}
