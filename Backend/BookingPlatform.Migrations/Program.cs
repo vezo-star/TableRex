@@ -25,6 +25,9 @@ if (command is not ("migrate" or "seed-dev" or "bootstrap-admin"))
                            (PLATFORM_ADMIN_NAME optional), or promote that existing account without changing its password.
                            Allowed in every environment; idempotent.
 
+        Every command: when APP_DB_USER is set, migrations are followed by creating or updating that least-privilege
+        login role (data access only) with APP_DB_PASSWORD; the Api and Worker should connect as it.
+
         Configuration: environment variables (ConnectionStrings__Postgres), command line
         (--ConnectionStrings:Postgres=...) and, when DOTNET_ENVIRONMENT=Development, .NET user-secrets.
         """);
@@ -61,6 +64,7 @@ builder.Services.AddSerilog(
 builder.Services.AddSingleton<MigrationRunner>();
 builder.Services.AddSingleton<DevSeeder>();
 builder.Services.AddSingleton<PlatformAdminBootstrapper>();
+builder.Services.AddSingleton<AppRoleProvisioner>();
 
 using var host = builder.Build();
 var log = host.Services.GetRequiredService<ILogger<MigrationRunner>>();
@@ -112,11 +116,35 @@ if (command == "bootstrap-admin")
     }
 }
 
+AppRoleOptions? appRoleOptions = null;
+if (builder.Configuration["APP_DB_USER"] is { Length: > 0 } appUser)
+{
+    appRoleOptions = new AppRoleOptions(appUser.Trim(), builder.Configuration["APP_DB_PASSWORD"] ?? string.Empty);
+    if (AppRoleProvisioner.Validate(appRoleOptions) is { } error)
+    {
+        log.LogError("{Error}", error);
+        return ExitFailure;
+    }
+}
+
 log.LogInformation("Applying migrations ({Environment})", builder.Environment.EnvironmentName);
 var result = host.Services.GetRequiredService<MigrationRunner>().Run(connectionString);
 if (!result.Successful)
 {
     return ExitFailure;
+}
+
+if (appRoleOptions is not null)
+{
+    try
+    {
+        await host.Services.GetRequiredService<AppRoleProvisioner>().RunAsync(connectionString, appRoleOptions, CancellationToken.None);
+    }
+    catch (Exception ex)
+    {
+        log.LogError(ex, "Provisioning the application database role failed");
+        return ExitFailure;
+    }
 }
 
 if (seedOptions is not null)
