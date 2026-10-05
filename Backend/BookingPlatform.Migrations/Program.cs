@@ -12,15 +12,18 @@ const int ExitFailure = 1;
 const int ExitUsage = 2;
 
 var command = args.FirstOrDefault();
-if (command is not ("migrate" or "seed-dev"))
+if (command is not ("migrate" or "seed-dev" or "bootstrap-admin"))
 {
     Console.Error.WriteLine("""
         Usage: BookingPlatform.Migrations <command>
 
         Commands:
-          migrate    Apply pending migrations from database/migrations to ConnectionStrings:Postgres.
-          seed-dev   Apply migrations, then create idempotent demo data (refused when DOTNET_ENVIRONMENT=Production).
-                     Requires DEV_ADMIN_PASSWORD (min 12 characters); DEV_ADMIN_EMAIL defaults to admin@demo.local.
+          migrate          Apply pending migrations from database/migrations to ConnectionStrings:Postgres.
+          seed-dev         Apply migrations, then create idempotent demo data (refused when DOTNET_ENVIRONMENT=Production).
+                           Requires DEV_ADMIN_PASSWORD (min 12 characters); DEV_ADMIN_EMAIL defaults to admin@demo.local.
+          bootstrap-admin  Apply migrations, then create the platform admin PLATFORM_ADMIN_EMAIL with PLATFORM_ADMIN_PASSWORD
+                           (PLATFORM_ADMIN_NAME optional), or promote that existing account without changing its password.
+                           Allowed in every environment; idempotent.
 
         Configuration: environment variables (ConnectionStrings__Postgres), command line
         (--ConnectionStrings:Postgres=...) and, when DOTNET_ENVIRONMENT=Development, .NET user-secrets.
@@ -57,6 +60,7 @@ builder.Services.AddSerilog(
 
 builder.Services.AddSingleton<MigrationRunner>();
 builder.Services.AddSingleton<DevSeeder>();
+builder.Services.AddSingleton<PlatformAdminBootstrapper>();
 
 using var host = builder.Build();
 var log = host.Services.GetRequiredService<ILogger<MigrationRunner>>();
@@ -94,6 +98,20 @@ if (command == "seed-dev")
     seedOptions = new DevSeedOptions(email, password);
 }
 
+PlatformAdminOptions? adminOptions = null;
+if (command == "bootstrap-admin")
+{
+    adminOptions = new PlatformAdminOptions(
+        builder.Configuration["PLATFORM_ADMIN_EMAIL"]?.Trim() ?? string.Empty,
+        builder.Configuration["PLATFORM_ADMIN_PASSWORD"] ?? string.Empty,
+        builder.Configuration["PLATFORM_ADMIN_NAME"] is { Length: > 0 } name ? name : "Platform Admin");
+    if (PlatformAdminBootstrapper.Validate(adminOptions) is { } error)
+    {
+        log.LogError("{Error}", error);
+        return ExitFailure;
+    }
+}
+
 log.LogInformation("Applying migrations ({Environment})", builder.Environment.EnvironmentName);
 var result = host.Services.GetRequiredService<MigrationRunner>().Run(connectionString);
 if (!result.Successful)
@@ -110,6 +128,19 @@ if (seedOptions is not null)
     catch (Exception ex)
     {
         log.LogError(ex, "seed-dev failed");
+        return ExitFailure;
+    }
+}
+
+if (adminOptions is not null)
+{
+    try
+    {
+        await host.Services.GetRequiredService<PlatformAdminBootstrapper>().RunAsync(connectionString, adminOptions, CancellationToken.None);
+    }
+    catch (Exception ex)
+    {
+        log.LogError(ex, "bootstrap-admin failed");
         return ExitFailure;
     }
 }
