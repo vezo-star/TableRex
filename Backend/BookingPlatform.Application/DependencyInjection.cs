@@ -1,3 +1,4 @@
+using BookingPlatform.Application.Availability;
 using BookingPlatform.Application.Identity;
 using BookingPlatform.Application.Tenancy;
 using BookingPlatform.Application.Venues;
@@ -19,6 +20,8 @@ public static class DependencyInjection
         services.AddScoped<VenueService>();
         services.AddScoped<ResourceService>();
         services.AddScoped<FloorPlanService>();
+        services.AddScoped<ResourceCombinationService>();
+        services.AddScoped<AvailabilityService>();
 
         return services;
     }

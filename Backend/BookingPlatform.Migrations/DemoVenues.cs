@@ -74,6 +74,7 @@ internal static class DemoVenues
 
         var ids = await CreateResourcesAsync(db, tenantId, venueId, sections, resources);
         await CreateFloorPlanAsync(db, tenantId, venueId, "Main floor", 1100, 700, resources, ids);
+        await CreateCombinationAsync(db, tenantId, venueId, "Tables 4 + 5", 5, 8, ids["T4"], ids["T5"]);
 
         var lunch = (new TimeOnly(12, 0), new TimeOnly(15, 0));
         var dinner = (new TimeOnly(18, 0), new TimeOnly(23, 0));
@@ -240,6 +241,25 @@ internal static class DemoVenues
                 """,
                 ("tenantId", tenantId), ("venueId", venueId), ("planId", planId), ("resourceId", ids[r.Code]),
                 ("x", (decimal)r.X), ("y", (decimal)r.Y), ("w", (decimal)r.W), ("h", (decimal)r.H), ("shape", r.Shape));
+        }
+    }
+
+    private static async Task CreateCombinationAsync(SeedDb db, Guid tenantId, Guid venueId, string name, int min, int capacity, params Guid[] members)
+    {
+        var combinationId = (Guid)(await db.ScalarAsync(
+            """
+            INSERT INTO resource_combinations (tenant_id, venue_id, name, min_capacity, capacity)
+            VALUES (@tenantId, @venueId, @name, @min, @capacity) RETURNING id
+            """,
+            ("tenantId", tenantId), ("venueId", venueId), ("name", name), ("min", min), ("capacity", capacity)))!;
+        foreach (var resourceId in members)
+        {
+            await db.ExecuteAsync(
+                """
+                INSERT INTO resource_combination_members (tenant_id, venue_id, combination_id, resource_id)
+                VALUES (@tenantId, @venueId, @combinationId, @resourceId)
+                """,
+                ("tenantId", tenantId), ("venueId", venueId), ("combinationId", combinationId), ("resourceId", resourceId));
         }
     }
 

@@ -1,4 +1,6 @@
+using BookingPlatform.Application.Availability;
 using BookingPlatform.Application.Common.Auditing;
+using BookingPlatform.Infrastructure.Availability;
 using BookingPlatform.Application.Common.Persistence;
 using BookingPlatform.Application.Common.RateLimiting;
 using BookingPlatform.Application.Common.Time;
@@ -81,6 +83,8 @@ public static class DependencyInjection
         services.AddScoped<IVenueAccessRepository, VenueAccessRepository>();
         services.AddScoped<IResourceRepository, ResourceRepository>();
         services.AddScoped<IFloorPlanRepository, FloorPlanRepository>();
+        services.AddScoped<IResourceCombinationRepository, ResourceCombinationRepository>();
+        services.AddScoped<IAvailabilityRepository, AvailabilityRepository>();
 
         return services;
     }

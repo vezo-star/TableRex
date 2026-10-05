@@ -168,6 +168,40 @@ public sealed class ResourcesController(ResourceService resources) : ControllerB
 }
 
 [ApiController]
+[Route("api/v1/resource-combinations")]
+[Produces("application/json")]
+public sealed class ResourceCombinationsController(ResourceCombinationService combinations) : ControllerBase
+{
+    [HttpGet]
+    [HasPermission(Permissions.ResourceView)]
+    public Task<IReadOnlyList<ResourceCombinationDto>> List([FromQuery] Guid venueId, CancellationToken cancellationToken) =>
+        combinations.ListAsync(venueId, cancellationToken);
+
+    [HttpPost]
+    [HasPermission(Permissions.ResourceCreate)]
+    [ProducesResponseType<ResourceCombinationDto>(StatusCodes.Status201Created)]
+    public async Task<ActionResult<ResourceCombinationDto>> Create(CreateResourceCombinationRequest request, CancellationToken cancellationToken)
+    {
+        var combination = await combinations.CreateAsync(request, cancellationToken);
+        return CreatedAtAction(nameof(Get), new { id = combination.Id }, combination);
+    }
+
+    [HttpGet("{id:guid}")]
+    [HasPermission(Permissions.ResourceView)]
+    public Task<ResourceCombinationDto> Get(Guid id, CancellationToken cancellationToken) => combinations.GetAsync(id, cancellationToken);
+
+    [HttpPut("{id:guid}")]
+    [HasPermission(Permissions.ResourceUpdate)]
+    public Task<ResourceCombinationDto> Update(Guid id, UpdateResourceCombinationRequest request, CancellationToken cancellationToken) =>
+        combinations.UpdateAsync(id, request, cancellationToken);
+
+    /// <summary>Deletes the combination, or deactivates it when bookings reference it.</summary>
+    [HttpDelete("{id:guid}")]
+    [HasPermission(Permissions.ResourceDelete)]
+    public Task<DeleteResult> Delete(Guid id, CancellationToken cancellationToken) => combinations.DeleteAsync(id, cancellationToken);
+}
+
+[ApiController]
 [Route("api/v1/floor-plans")]
 [Produces("application/json")]
 public sealed class FloorPlansController(FloorPlanService floorPlans) : ControllerBase
