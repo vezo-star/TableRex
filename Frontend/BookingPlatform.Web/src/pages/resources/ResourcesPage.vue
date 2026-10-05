@@ -105,6 +105,7 @@
       :sections="sections"
       :types="types"
       @saved="onSaved"
+      @manage-types="openTypesFromDialog"
     />
     <ResourceTypesDialog v-model="typesOpen" :types="types" @changed="loadTypes" />
   </q-page>
@@ -208,6 +209,11 @@ async function load() {
 const editOpen = ref(false)
 const editing = ref(null)
 const typesOpen = ref(false)
+
+function openTypesFromDialog() {
+  editOpen.value = false
+  typesOpen.value = true
+}
 
 function openEdit(resource) {
   editing.value = resource

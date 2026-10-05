@@ -18,6 +18,20 @@
               action.error.value.message
             }}</q-banner>
           </div>
+          <div v-if="!typeOptions.length" class="col-12">
+            <q-banner dense rounded class="bg-blue-1" data-test="no-types-banner">
+              Every resource has a type, such as Table, Booth or Room. Create one first.
+              <template #action>
+                <q-btn
+                  flat
+                  color="primary"
+                  label="Create a type"
+                  data-test="create-type-link"
+                  @click="$emit('manage-types')"
+                />
+              </template>
+            </q-banner>
+          </div>
           <q-input
             v-model.trim="form.name"
             class="col-12 col-sm-8"
@@ -150,6 +164,7 @@
             color="primary"
             unelevated
             label="Save"
+            :disable="!typeOptions.length"
             :loading="action.loading.value"
           />
         </q-card-actions>
@@ -172,7 +187,7 @@ const props = defineProps({
   sections: { type: Array, default: () => [] },
   types: { type: Array, default: () => [] },
 })
-const emit = defineEmits(['update:modelValue', 'saved'])
+const emit = defineEmits(['update:modelValue', 'saved', 'manage-types'])
 
 const form = reactive({
   name: '',
