@@ -43,16 +43,15 @@ const state = computed(() => {
     return {
       label: 'Reconnecting…',
       icon: 'sync',
-      color: 'warning',
-      description: 'Live updates are paused while reconnecting; the page refreshes once connected.',
+      color: 'deep-orange-10',
+      description: 'Reconnecting… Live updates are paused; the page refreshes once connected.',
     }
   }
   return {
     label: 'Live updates paused',
     icon: 'sensors_off',
     color: 'grey-7',
-    description:
-      'Live updates are paused. Pages refresh every minute; click to try reconnecting now.',
+    description: 'Live updates paused. Pages refresh every minute; click to try reconnecting now.',
     retryable: realtime.status === RealtimeStatus.DISCONNECTED,
   }
 })

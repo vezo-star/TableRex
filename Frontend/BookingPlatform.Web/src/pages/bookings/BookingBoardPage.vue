@@ -45,6 +45,7 @@
             dense
             outlined
             style="width: 170px"
+            aria-label="Board date"
             data-test="board-date"
           />
           <q-btn flat round dense icon="chevron_right" aria-label="Next day" @click="shiftDay(1)" />

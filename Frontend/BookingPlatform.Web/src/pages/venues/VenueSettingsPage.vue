@@ -10,7 +10,7 @@
         :to="{ name: RouteNames.VENUES }"
       />
       <div class="text-h5 col">{{ venue?.name ?? 'Venue' }}</div>
-      <q-badge v-if="venue" :color="venue.status === 'ACTIVE' ? 'positive' : 'grey'">
+      <q-badge v-if="venue" :color="venue.status === 'ACTIVE' ? 'positive' : 'grey-8'">
         {{ venue.status }}
       </q-badge>
     </div>
@@ -43,7 +43,7 @@
         ACTIVE to share {{ publicUrl }}.
       </template>
       <template v-if="publicBookingOpen" #action>
-        <q-btn flat dense no-caps color="primary" icon="content_copy" label="Copy" @click="copy" />
+        <q-btn flat dense no-caps color="blue-9" icon="content_copy" label="Copy" @click="copy" />
       </template>
     </q-banner>
 

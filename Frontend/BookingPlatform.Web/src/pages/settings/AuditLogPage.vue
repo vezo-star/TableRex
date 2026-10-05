@@ -46,11 +46,25 @@
       @retry="reload"
     />
 
-    <q-list bordered separator class="rounded-borders" data-test="audit-list">
+    <q-list
+      bordered
+      separator
+      role="region"
+      aria-label="Audit entries"
+      class="rounded-borders"
+      data-test="audit-list"
+    >
       <q-item v-if="!items.length && !loading">
         <q-item-section class="text-grey-7">No audit entries match these filters.</q-item-section>
       </q-item>
-      <q-expansion-item v-for="item in items" :key="item.id" dense :data-test="`audit-${item.id}`">
+      <!-- A null toggle label drops Quasar's generic "Expand" so the row is named by its visible text. -->
+      <q-expansion-item
+        v-for="item in items"
+        :key="item.id"
+        dense
+        :toggle-aria-label="null"
+        :data-test="`audit-${item.id}`"
+      >
         <template #header>
           <q-item-section avatar>
             <q-icon :name="iconFor(item.action)" color="grey-8" />
@@ -66,7 +80,9 @@
             </q-item-label>
           </q-item-section>
           <q-item-section side>
-            <q-item-label caption>{{ formatInstant(item.createdAt) }}</q-item-label>
+            <q-item-label caption class="text-grey-8">{{
+              formatInstant(item.createdAt)
+            }}</q-item-label>
           </q-item-section>
         </template>
         <q-card flat class="bg-grey-1">

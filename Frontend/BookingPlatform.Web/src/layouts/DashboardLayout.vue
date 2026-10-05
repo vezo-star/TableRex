@@ -76,7 +76,7 @@
     </q-header>
 
     <q-drawer v-if="auth.isAuthenticated" v-model="drawerOpen" show-if-above bordered :width="240">
-      <q-list padding>
+      <q-list padding role="navigation" aria-label="Main navigation">
         <q-item v-for="item in navigation" :key="item.label" v-ripple :to="item.to" exact clickable>
           <q-item-section avatar>
             <q-icon :name="item.icon" />

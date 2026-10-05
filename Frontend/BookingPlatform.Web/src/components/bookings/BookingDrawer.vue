@@ -43,7 +43,7 @@
       <q-inner-loading :showing="loading && !booking" />
 
       <template v-if="booking">
-        <q-tabs v-model="tab" dense align="left" class="text-grey-8" active-color="primary" no-caps>
+        <q-tabs v-model="tab" dense align="left" class="text-grey-9" active-color="primary" no-caps>
           <q-tab name="details" label="Details" />
           <q-tab name="history" label="History" data-test="tab-history" />
           <q-tab v-if="canViewPayments" name="payments" label="Payments" data-test="tab-payments" />
@@ -75,7 +75,7 @@
               </div>
 
               <template v-if="mode === 'view'">
-                <q-list dense class="q-mb-md">
+                <q-list dense role="none" class="q-mb-md">
                   <q-item>
                     <q-item-section avatar><q-icon name="schedule" /></q-item-section>
                     <q-item-section>

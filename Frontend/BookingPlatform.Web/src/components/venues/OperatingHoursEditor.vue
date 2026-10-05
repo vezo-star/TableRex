@@ -98,7 +98,13 @@
           <q-card flat bordered class="q-pa-sm">
             <div class="text-weight-medium">
               {{ formatDate(d.date) }}
-              <q-badge v-if="d.isSpecial" color="orange" label="Special" class="q-ml-xs" />
+              <q-badge
+                v-if="d.isSpecial"
+                color="orange"
+                text-color="black"
+                label="Special"
+                class="q-ml-xs"
+              />
             </div>
             <div v-if="d.isClosed" class="text-grey-7">Closed</div>
             <div v-for="p in d.periods" :key="p.startsAt" class="text-body2">

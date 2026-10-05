@@ -14,7 +14,16 @@
         <q-btn flat round dense icon="close" aria-label="Close" @click="close" />
       </q-card-section>
 
-      <q-stepper v-model="step" flat animated color="primary" class="q-pt-none">
+      <q-stepper
+        v-model="step"
+        flat
+        animated
+        color="primary"
+        active-color="primary"
+        done-color="primary"
+        inactive-color="grey-8"
+        class="q-pt-none"
+      >
         <q-step name="when" title="When" icon="event" :done="step !== 'when'">
           <div class="row q-col-gutter-sm">
             <q-input

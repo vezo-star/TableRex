@@ -18,7 +18,7 @@
       >
         <q-item-section>{{ venue.name }}</q-item-section>
         <q-item-section v-if="venue.status !== 'ACTIVE'" side>
-          <q-badge color="grey" label="Inactive" />
+          <q-badge color="grey-8" label="Inactive" />
         </q-item-section>
       </q-item>
     </q-list>

@@ -24,7 +24,7 @@
       <div class="row items-center q-mb-md q-gutter-sm">
         <div class="text-h5 col" data-test="customer-name">
           {{ fullName }}
-          <q-badge v-if="customer.isAnonymized" color="grey-6" class="q-ml-sm" label="Anonymised" />
+          <q-badge v-if="customer.isAnonymized" color="grey-8" class="q-ml-sm" label="Anonymised" />
         </div>
         <q-btn
           v-if="canManage && !customer.isAnonymized"

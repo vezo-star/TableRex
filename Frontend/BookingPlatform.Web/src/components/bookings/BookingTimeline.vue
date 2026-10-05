@@ -1,6 +1,12 @@
 <template>
   <div class="timeline" data-test="booking-timeline">
-    <div ref="scroller" class="timeline-scroll">
+    <div
+      ref="scroller"
+      class="timeline-scroll"
+      tabindex="0"
+      role="region"
+      aria-label="Booking timeline"
+    >
       <div class="timeline-grid" :style="{ width: `${LABEL_WIDTH + trackWidth}px` }">
         <div class="timeline-header row no-wrap">
           <div class="timeline-label header-label">Resource</div>
@@ -77,13 +83,14 @@
                   :title="tooltip(item.booking)"
                   role="button"
                   tabindex="0"
-                  :aria-label="`${resource.name}: ${tooltip(item.booking)}`"
+                  :aria-label="bookingLabel(item.booking, resource)"
                   :data-test="`timeline-booking-${item.booking.id}`"
                   @pointerdown="startDrag($event, item.booking, resource.id)"
                   @keydown.enter="$emit('select', item.booking)"
                 >
-                  <span class="text-weight-medium">{{ item.booking.partySize }}</span>
-                  <span class="q-ml-xs ellipsis">{{ customerName(item.booking.customer) }}</span>
+                  <span class="text-weight-medium">{{ item.booking.partySize }}</span
+                  >{{ ' '
+                  }}<span class="q-ml-xs ellipsis">{{ customerName(item.booking.customer) }}</span>
                 </div>
               </template>
             </div>
@@ -221,6 +228,15 @@ function tooltip(booking) {
   return `${formatTime(booking.startsAt, tz)}–${formatTime(booking.endsAt, tz)} · ${customerName(
     booking.customer,
   )} · party of ${booking.partySize} · ${statusMeta(booking.status).label}`
+}
+
+/** Starts with the visible text ("party name") so speech-input users can target it (WCAG 2.5.3). */
+function bookingLabel(booking, resource) {
+  const tz = props.board.timeZone
+  return `${booking.partySize} ${customerName(booking.customer)} · ${resource.name} · ${formatTime(
+    booking.startsAt,
+    tz,
+  )}–${formatTime(booking.endsAt, tz)} · ${statusMeta(booking.status).label}`
 }
 
 function onEmptyDoubleClick(event, resource) {
@@ -443,7 +459,7 @@ onBeforeUnmount(() => {
 .booking.status-CANCELLED,
 .booking.status-NO_SHOW {
   border-color: #bdbdbd;
-  color: #757575;
+  color: #616161;
 }
 .booking.status-CANCELLED {
   text-decoration: line-through;

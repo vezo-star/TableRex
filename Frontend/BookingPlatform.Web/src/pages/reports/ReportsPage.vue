@@ -91,7 +91,7 @@
               <q-card-section>
                 <div class="text-caption text-grey-7">{{ kpi.label }}</div>
                 <div class="text-h5 text-weight-medium">{{ kpi.value }}</div>
-                <div v-if="kpi.hint" class="text-caption text-grey-6">{{ kpi.hint }}</div>
+                <div v-if="kpi.hint" class="text-caption text-grey-8">{{ kpi.hint }}</div>
               </q-card-section>
             </q-card>
           </div>
@@ -150,7 +150,7 @@
                     </div>
                     <div class="hbar-value">{{ h.covers }}</div>
                   </div>
-                  <div v-if="hours.length" class="text-caption text-grey-6 q-mt-xs">
+                  <div v-if="hours.length" class="text-caption text-grey-8 q-mt-xs">
                     Guests by booking start time ({{ report.timeZone }})
                   </div>
                 </q-card-section>

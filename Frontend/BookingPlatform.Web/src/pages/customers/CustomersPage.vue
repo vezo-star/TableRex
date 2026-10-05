@@ -53,10 +53,10 @@
     >
       <template #body-cell-name="scope">
         <q-td :props="scope">
-          <span :class="{ 'text-grey-6': scope.row.isAnonymized }">{{ scope.value }}</span>
+          <span :class="{ 'text-grey-8': scope.row.isAnonymized }">{{ scope.value }}</span>
           <q-badge
             v-if="scope.row.isAnonymized"
-            color="grey-5"
+            color="grey-8"
             class="q-ml-sm"
             label="Anonymised"
           />

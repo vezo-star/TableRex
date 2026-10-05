@@ -55,7 +55,7 @@
             dense
             square
             color="blue-1"
-            text-color="primary"
+            text-color="blue-9"
           >
             {{ RoleLabels[role] ?? role }}
           </q-chip>
@@ -81,7 +81,7 @@
       </template>
       <template #body-cell-status="props">
         <q-td :props="props">
-          <q-badge :color="props.row.status === 'ACTIVE' ? 'positive' : 'grey'">{{
+          <q-badge :color="props.row.status === 'ACTIVE' ? 'positive' : 'grey-8'">{{
             props.row.status
           }}</q-badge>
         </q-td>

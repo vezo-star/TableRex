@@ -36,7 +36,7 @@
     >
       <template #body-cell-status="props">
         <q-td :props="props">
-          <q-badge :color="props.row.status === 'ACTIVE' ? 'positive' : 'grey'">
+          <q-badge :color="props.row.status === 'ACTIVE' ? 'positive' : 'grey-8'">
             {{ props.row.status }}
           </q-badge>
         </q-td>

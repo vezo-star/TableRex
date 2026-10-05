@@ -3,7 +3,7 @@
     dense
     square
     :color="meta.color"
-    text-color="white"
+    :text-color="meta.textColor ?? 'white'"
     :icon="meta.icon"
     :label="meta.label"
     class="q-ma-none"

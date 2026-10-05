@@ -21,14 +21,21 @@ export const ACTIVE_STATUSES = Object.freeze([
   BookingStatus.SEATED,
 ])
 
+/** Chip colours keep the label at WCAG AA contrast (4.5:1) against `textColor` (white unless set). */
 export const StatusMeta = Object.freeze({
-  PENDING: { label: 'Pending', color: 'amber-8', fill: '#fff8e1', icon: 'hourglass_empty' },
-  HELD: { label: 'Held', color: 'deep-orange-5', fill: '#fbe9e7', icon: 'pause_circle' },
+  PENDING: {
+    label: 'Pending',
+    color: 'amber-8',
+    textColor: 'black',
+    fill: '#fff8e1',
+    icon: 'hourglass_empty',
+  },
+  HELD: { label: 'Held', color: 'deep-orange-10', fill: '#fbe9e7', icon: 'pause_circle' },
   CONFIRMED: { label: 'Confirmed', color: 'primary', fill: '#e3f2fd', icon: 'event_available' },
-  CHECKED_IN: { label: 'Checked in', color: 'teal', fill: '#e0f2f1', icon: 'how_to_reg' },
+  CHECKED_IN: { label: 'Checked in', color: 'teal-8', fill: '#e0f2f1', icon: 'how_to_reg' },
   SEATED: { label: 'Seated', color: 'positive', fill: '#e8f5e9', icon: 'event_seat' },
-  COMPLETED: { label: 'Completed', color: 'grey-7', fill: '#f5f5f5', icon: 'task_alt' },
-  CANCELLED: { label: 'Cancelled', color: 'grey-5', fill: '#fafafa', icon: 'cancel' },
+  COMPLETED: { label: 'Completed', color: 'blue-grey-7', fill: '#f5f5f5', icon: 'task_alt' },
+  CANCELLED: { label: 'Cancelled', color: 'grey-7', fill: '#fafafa', icon: 'cancel' },
   NO_SHOW: { label: 'No-show', color: 'negative', fill: '#ffebee', icon: 'person_off' },
 })
 
@@ -51,7 +58,7 @@ export const BlockReasonLabels = Object.freeze({
 })
 
 export function statusMeta(status) {
-  return StatusMeta[status] ?? { label: status, color: 'grey', fill: '#ffffff', icon: 'help' }
+  return StatusMeta[status] ?? { label: status, color: 'grey-8', fill: '#ffffff', icon: 'help' }
 }
 
 export function isActiveStatus(status) {

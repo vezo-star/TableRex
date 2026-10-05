@@ -1,5 +1,10 @@
 /* app global css */
 
+/* Quasar's default positive (#21ba45) gives white text a 2.6:1 contrast; WCAG AA needs 4.5:1. */
+:root {
+  --q-positive: #2e7d32;
+}
+
 .page-narrow {
   max-width: 960px;
   margin: 0 auto;

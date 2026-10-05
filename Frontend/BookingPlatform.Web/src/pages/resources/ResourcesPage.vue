@@ -64,8 +64,13 @@
       </template>
       <template #body-cell-flags="props">
         <q-td :props="props">
-          <q-badge v-if="!props.row.isActive" color="grey" label="Inactive" class="q-mr-xs" />
-          <q-badge v-if="!props.row.isBookableOnline" color="orange" label="Staff only" />
+          <q-badge v-if="!props.row.isActive" color="grey-8" label="Inactive" class="q-mr-xs" />
+          <q-badge
+            v-if="!props.row.isBookableOnline"
+            color="orange"
+            text-color="black"
+            label="Staff only"
+          />
         </q-td>
       </template>
       <template #body-cell-actions="props">

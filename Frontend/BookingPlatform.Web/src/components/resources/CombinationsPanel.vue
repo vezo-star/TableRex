@@ -25,10 +25,11 @@
         <q-item-section>
           <q-item-label>
             {{ combination.name }}
-            <q-badge v-if="!combination.isActive" color="grey" label="Inactive" class="q-ml-xs" />
+            <q-badge v-if="!combination.isActive" color="grey-8" label="Inactive" class="q-ml-xs" />
             <q-badge
               v-if="!combination.isBookableOnline"
               color="orange"
+              text-color="black"
               label="Staff only"
               class="q-ml-xs"
             />

@@ -22,7 +22,15 @@
           Online booking is not available right now. Please contact the business directly.
         </div>
 
-        <q-list v-else bordered separator class="rounded-borders bg-white" data-test="locations">
+        <q-list
+          v-else
+          bordered
+          separator
+          role="navigation"
+          aria-label="Locations"
+          class="rounded-borders bg-white"
+          data-test="locations"
+        >
           <q-item
             v-for="venue in tenant.venues"
             :key="venue.slug"

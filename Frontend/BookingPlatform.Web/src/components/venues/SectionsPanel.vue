@@ -25,7 +25,7 @@
         </q-item-section>
         <q-item-section side>
           <div class="row items-center q-gutter-xs">
-            <q-badge v-if="!section.isActive" color="grey" label="Inactive" />
+            <q-badge v-if="!section.isActive" color="grey-8" label="Inactive" />
             <template v-if="canManage">
               <q-btn flat dense icon="edit" aria-label="Edit section" @click="openEdit(section)" />
               <q-btn
