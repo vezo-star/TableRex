@@ -1,6 +1,6 @@
 # Database
 
-Status: **Phases 1–9 implemented (V001–V029).** SQL below is illustrative; the migrations are the source of truth once written, and this document is updated to match them.
+Status: **Phases 1–10 implemented (V001–V030).** SQL below is illustrative; the migrations are the source of truth once written, and this document is updated to match them.
 
 ## 1. Platform
 
@@ -17,7 +17,7 @@ Status: **Phases 1–9 implemented (V001–V029).** SQL below is illustrative; t
 - **Immutable once merged** to main. Corrections are new migrations.
 - Execution: `dotnet run --project Backend/BookingPlatform.Migrations --launch-profile migrate -- migrate` locally, or the `migrator` image (`docker run --rm -e ConnectionStrings__Postgres=... bookingplatform/migrator`). Exit codes: 0 success (including "nothing to apply"), 1 failure or missing connection string, 2 unknown command. The Api may auto-migrate only in Development when `Database__AutoMigrate=true`. Production runs the migrator as an explicit deployment step/job.
 - Script names are validated (`V###__lower_snake.sql`, unique version numbers) by a unit test, so a misnamed file fails CI rather than being silently skipped.
-- Implemented: **V001__extensions** (Phase 1); **V002–V005, V023, V027** (Phase 2); **V006–V013** (Phase 3); **V014–V020** (Phase 4); **V021, V022, V024–V026** (Phase 5); **V028** (Phase 8); **V029** (Phase 9).
+- Implemented: **V001__extensions** (Phase 1); **V002–V005, V023, V027** (Phase 2); **V006–V013** (Phase 3); **V014–V020** (Phase 4); **V021, V022, V024–V026** (Phase 5); **V028** (Phase 8); **V029** (Phase 9); **V030** (Phase 10).
 - Dev data: `--launch-profile seed-dev` (C# seeder, idempotent; runs migrations first; creates Demo Hospitality and Demo Coworking, the dev admin as platform admin + owner of both, and manager/host/staff/viewer users in Demo Hospitality; all passwords come from `DEV_ADMIN_PASSWORD`; refuses when `DOTNET_ENVIRONMENT=Production`). Phase 3 adds Demo Restaurant and Demo Club (Demo Hospitality) and Demo Workspace (Demo Coworking) with sections, resource types, resources, weekly hours and a floor plan each; a venue's contents are only seeded when the venue itself is created, so edits made in the app survive re-runs. Phase 4 adds a "Tables 4 + 5" combination to a newly created Demo Restaurant.
 - Out-of-order numbers: DbUp applies every script missing from the journal, sorted by name, so a database that already has V027 still receives V006–V022 later. Consequently a lower-numbered migration added later must not depend on data or objects from a higher-numbered one that was applied earlier, and vice versa.
 
@@ -70,6 +70,19 @@ Status: **Phases 1–9 implemented (V001–V029).** SQL below is illustrative; t
 - V029 `notification_deliveries`: one row per outbox message and channel settled by the notification dispatcher — `status` `SENT` or `SKIPPED` (with `detail` ≤ 500 chars), `template`, `provider`, `provider_message_id`, optional `tenant_id` (FK CASCADE), `booking_id` (no FK: bookings are never deleted) and `user_id` (FK SET NULL). `uq_notification_deliveries_message (outbox_message_id, channel)` makes recording idempotent (`ON CONFLICT DO NOTHING`) and is the "already handled" check; the partial index `(booking_id, template) WHERE booking_id IS NOT NULL` serves "this booking already got this template". No recipient addresses or bodies are stored. Purged after 180 days.
 - V029 `password_reset_requests`: `user_id` (FK CASCADE), `token_hash bytea NULL` (unique, exactly 32 bytes when set — written by the Worker at send time), `expires_at` (CHECK `> created_at`), `used_at`, `invalidated_at`, `requested_ip`. Indexes on `(user_id, created_at DESC)` and `expires_at`. Purged 7 days after expiry.
 - Password reset outbox rows have `tenant_id = NULL` (users are global) and payload `{ eventId, type: "PasswordReset", requestId, occurredAt }`.
+
+### Phase 10 schema notes
+
+- V030 `venue_payment_settings`: PK `(tenant_id, venue_id)`, FK to `venues (tenant_id, id)` CASCADE. `deposit_policy` is `NONE` / `PER_BOOKING` / `PER_GUEST`. `deposit_amount_minor` is NULL exactly when the policy is `NONE`, otherwise 100–10 000 000. `currency` matches `^[A-Z]{3}$` and `payment_window_minutes` is 5–1440. A venue without a row has no deposit. Kept out of `venues` so payment settings never mix with booking rules (D-082).
+- V030 `payments`:
+  - Columns: `purpose` (`DEPOSIT`), `provider` (a name only), the opaque `provider_reference`, `amount_minor > 0`, `currency`, `status` (`CREATED`/`PENDING`/`SUCCEEDED`/`FAILED`/`CANCELLED`/`EXPIRED`), `refunded_amount_minor` (0..amount, non-zero only when `SUCCEEDED`), `failure_reason` ≤ 500, `requires_attention`, `expires_at`, `succeeded_at` (set exactly when `SUCCEEDED`), `version`.
+  - Integrity: composite FK `(tenant_id, venue_id, booking_id)` to `bookings` RESTRICT, so a payment can never point at another tenant's or venue's booking.
+  - `uq_payments_open_deposit (booking_id) WHERE purpose = 'DEPOSIT' AND status IN ('CREATED','PENDING','SUCCEEDED')` allows at most one live deposit per booking.
+  - Indexes: by booking, a partial index on flagged payments, and `(provider, provider_reference)`.
+- V030 `payment_refunds`: FK `(tenant_id, payment_id)` RESTRICT; `amount_minor > 0`; `status` `PENDING`/`SUCCEEDED`/`FAILED`, with `completed_at` NULL exactly while `PENDING`; `requested_by_user_id` (FK SET NULL); `reason` and `failure_reason` ≤ 500. Pending refunds reserve their amount (D-086).
+- V030 `payment_webhook_events`: unique `(provider, provider_event_id)` (the dedupe key, D-083), `event_type`, `outcome` (`APPLIED`/`IGNORED`/`UNMATCHED`) with `detail`, optional `tenant_id` (FK CASCADE) and `payment_id`, `payload_sha256` (exactly 32 bytes; bodies are never stored), `received_at` (indexed for a future purge).
+- V030 permissions: `payment.view` (OWNER, ADMIN, MANAGER, HOST) and `payment.refund` (OWNER, ADMIN, MANAGER).
+- Deposit expiry uses the existing `ix_bookings_held_expiry (expires_at) WHERE status = 'HELD'` from V015.
 
 ### Planned sequence and phase
 

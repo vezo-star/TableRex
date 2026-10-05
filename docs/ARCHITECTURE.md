@@ -181,6 +181,8 @@ Key behaviours:
 - **Configuration**: `appsettings.json` (non-secret defaults) + `appsettings.{Environment}.json` + environment variables + user-secrets in development. Environments: Development, Test, Production.
 - **OpenAPI**: Swashbuckle, JWT security scheme, documented ProblemDetails responses, `Idempotency-Key` header parameter.
 
-## 12. Integration boundaries (future)
+## 12. Integration boundaries
 
-Notifications (`NotificationService` + `IEmailProvider`), payments (`IPaymentProvider`, Phase 10), external API clients (API keys/service credentials, later), webhooks, POS/CRM/calendar connectors — each behind an Application interface fed by outbox events. The booking engine never calls an external system inside its transaction.
+Notifications (`NotificationService` + `IEmailProvider`), payments (`IPaymentProvider`), external API clients (API keys/service credentials, later), webhooks, POS/CRM/calendar connectors — each behind an Application interface fed by outbox events. The booking engine never calls an external system inside its transaction.
+
+Payments (Phase 10) follow the same rule. `PaymentService` locks the booking, writes the payment and commits, then calls the provider outside the transaction, then records the outcome in a new transaction. Webhooks come in through `POST /api/v1/payments/webhooks/{provider}`, are verified by the provider adapter and are applied together with the booking transition in one transaction (`BookingTransitions.ApplyInTransactionAsync`). The Worker expires unpaid deposits through the same transitions. Adding a provider means one `IPaymentProvider` class plus its options in `AddPayments` (D-082).

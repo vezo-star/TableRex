@@ -41,6 +41,9 @@ Status: **Phase 1 — local development and container images implemented.** Prod
 | `Notifications__Email__SmtpUsername`, `Notifications__Email__SmtpPassword` | Worker | Relay credentials (**secret**) when required |
 | `Notifications__Email__PickupDirectory` | Worker | Target directory for `Pickup` |
 | `Notifications__BatchSize`, `Notifications__PollSeconds`, `Notifications__MaxAttempts` | Worker | Dispatcher tuning (defaults 20, 5, 8). Wake-up is instant via `LISTEN outbox`; polling is the fallback. |
+| `Payments__Provider` | Api | Active payment provider name; **empty disables online payments** (deposit venues then refuse online bookings with 503, D-087). Only registered providers are accepted, and startup fails otherwise. `Simulated` exists in Development/Test only. **Production: leave empty until a real provider adapter is added.** |
+| `Payments__PublicBaseUrl` | Api | Required when a provider is set: origin of the web app for provider return URLs, e.g. `https://app.example.com` (absolute http/https, no path, no trailing slash) |
+| `Payments__Simulated__WebhookSecret` | Api | Optional (non-Production): ≥ 32 bytes. When unset, a random key per process is used, which is fine for a single dev instance |
 | `MAILPIT_SMTP_PORT`, `MAILPIT_UI_PORT` | Compose | Local Mailpit ports (defaults 1025 / 8025; UI at `http://localhost:8025`) |
 | `DEV_ADMIN_EMAIL`, `DEV_ADMIN_PASSWORD` | Migrations `seed-dev` | Development only; password ≥12 chars. `seed-dev` refuses to run when `DOTNET_ENVIRONMENT=Production`. |
 

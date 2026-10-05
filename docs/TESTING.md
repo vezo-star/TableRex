@@ -1,6 +1,6 @@
 # Testing
 
-Status: **Phases 1–9 implemented** (262 backend tests, 190 Vitest tests at the end of Phase 9). Each phase adds the tests listed for it; a phase is not complete while any test fails.
+Status: **Phases 1–10 implemented** (282 backend tests, 210 Vitest tests at the end of Phase 10). Each phase adds the tests listed for it; a phase is not complete while any test fails.
 
 ## 0. Running the suites
 
@@ -123,6 +123,19 @@ Implemented in Phase 7:
 `PublicBookingRateLimitTests` (`public-read` set to 3 per window): the fourth read → 429 `RATE_LIMITED` with `Retry-After`.
 
 Vitest: `services/publicBookingService.spec.js` (anonymous calls, token only in the header, fragment links), `utils/publicBooking.spec.js`, `pages/publicBookingPages.spec.js` (times, closed/empty states, booking and confirmation link, slot taken → times reloaded, idempotency key reused after a network failure, 404 venue, manage page: missing fragment, load + confirm cancel, contact-venue state). Mobile (360 px) browser walkthrough done in Phase 8: book → confirmation → manage link → cancel, and online booking toggled off/on from venue settings; Playwright in Phase 12.
+
+## 6b. Payment tests (Phase 10)
+
+`Payments/PaymentTests.cs` (Simulated provider with a known random webhook secret):
+- **Deposit flow**: a deposit venue books as `HELD` with a `CREATED` payment and `canPay`, and nothing is emailed until the deposit is paid. Checkout returns a redirect without the manage token. A forged checkout token gets 404. Completing it confirms the booking (history "Deposit paid.", audit, outbox). A HOST gets 403 on refunds. Then a partial refund, an idempotent replay, the refundable amount and 422 for too much.
+- **Webhooks**: missing, wrong and replayed signatures → 401 with nothing written. A wrong amount flags the payment and never confirms. A failure keeps the booking payable. Two different event ids racing for one payment apply once. A redelivery is a no-op, and an unknown payment is recorded as `UNMATCHED`.
+- **Expiry**: `DepositExpiryService` releases due `HELD` bookings (allocation reason `EXPIRED`, payment `EXPIRED`, the table bookable again) and leaves unexpired ones. A payment arriving afterwards is recorded but flagged. A guest cancel closes the open payment as `CANCELLED`.
+
+`Payments/PaymentResilienceTests.cs`: an always-failing provider → checkout 503 with the booking still `HELD`; a refund stays `PENDING` and flagged; a second refund and five concurrent ones → 422. With payments off: settings validation, `onlinePaymentsAvailable: false`, a public booking at a deposit venue → 503 with nothing written, and a staff booking is still `CONFIRMED`.
+
+Unit (`Payments/PaymentPrimitivesTests.cs`): deposit amounts per policy, `PaymentOptions` validity, sign/verify round trip, tampering, foreign secret, replay window, malformed payloads, checkout tokens, and `Expire` allowed only from `HELD`.
+
+Vitest: `utils/payments.spec.js` (money parsing without float drift, notices, token parking, fragment parsing, same-origin return URLs) and `components/paymentComponents.spec.js` (pay card, return page, Simulated checkout incl. a cross-origin return URL being ignored, staff payments panel with a partial refund and idempotency key, deposit settings in minor units), plus the deposit cases in `pages/publicBookingPages.spec.js`.
 
 ## 7. Frontend tests
 

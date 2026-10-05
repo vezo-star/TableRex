@@ -61,6 +61,8 @@ Mandatory tests: see `TESTING.md` §4.
 | staff.manage | ✓ | ✓ | | | | |
 | reports.view | ✓ | ✓ | ✓ | | | |
 | settings.manage | ✓ | ✓ | | | | |
+| payment.view | ✓ | ✓ | ✓ | ✓ | | |
+| payment.refund | ✓ | ✓ | ✓ | | | |
 
 OWNER vs ADMIN difference: ownership transfer and tenant deletion/suspension requests (not permissions in this list; owner-only operations).
 
@@ -88,6 +90,9 @@ OWNER vs ADMIN difference: ownership transfer and tenant deletion/suspension req
   | `public-booking` | create booking | 10 per 600 s |
   | `public-manage` | view booking by token | 60 per 60 s |
   | `public-cancel` | cancel booking by token | 10 per 600 s |
+  | `public-payment` | start a deposit checkout by token | 10 per 600 s |
+  | `payment-webhook` | provider webhooks | 600 per 60 s |
+  | `payment-simulated` | Simulated checkout completion (non-Production only) | 30 per 60 s |
 
   Each can be tuned per environment with `RateLimiting__Policies__{policy}__PermitLimit` and `RateLimiting__Policies__{policy}__WindowSeconds`. Exceeding a limit returns 429 `RATE_LIMITED` with `Retry-After`.
 - Per contact: at most 5 public booking attempts per email per hour (counter keyed by SHA-256 of the normalised email, so the address is not stored in Redis), and at most `PublicBooking__MaxActiveBookingsPerContact` (default 3) upcoming active bookings per email per venue (422 `CONTACT_BOOKING_LIMIT`).
@@ -118,11 +123,21 @@ OWNER vs ADMIN difference: ownership transfer and tenant deletion/suspension req
 - `notification_deliveries` stores ids, template, status and provider message id, never recipient addresses or bodies. The development `Log` provider logs a masked recipient (`t***@example.test`) and subject only, because bodies contain manage and reset links.
 - SMTP credentials (`Notifications__Email__SmtpUsername` / `SmtpPassword`) are secrets; use TLS (`SmtpEnableSsl=true`, port 587) for any non-local relay.
 
+### Payments (Phase 10)
+
+- **No card data, ever.** Guests pay on the provider's hosted page; the platform stores amounts, statuses, provider names and opaque references only. PCI scope stays with the provider (SAQ-A style integration).
+- **Webhook authentication.** Every provider implements `VerifyWebhook`. An unauthenticated delivery is rejected with 401 `INVALID_WEBHOOK_SIGNATURE` and logged as a warning without the body. The Simulated provider shows the expected shape: `HMAC-SHA256(secret, "{timestamp}.{body}")`, compared in constant time, with a 300 s replay window. Bodies are limited to 64 KB and rate limited per IP.
+- **Idempotent and auditable.** Each event is claimed once by `(provider, provider_event_id)` inside the transaction that applies it. Only the body's SHA-256 is stored, together with the outcome (`payment_webhook_events`). State changes are audited (`payment.*`) with no amounts beyond the payment's own.
+- **Never trust the event's numbers.** Events are matched by our payment id (the merchant reference). A wrong amount or currency, or money for a cancelled booking, flags the payment and never confirms (D-083).
+- **Manage token stays with the guest.** The provider receives the payment id, amount, a description and a return URL without the token. The SPA parks the token in `sessionStorage` for that tab only and the return page puts it back in the fragment (D-085). The Simulated checkout page only follows same-origin return URLs, and its completion endpoint requires an HMAC checkout token bound to the payment.
+- **Refunds** need `payment.refund`, an `Idempotency-Key`, and a refundable amount that already counts pending refunds. An unknown provider outcome stays pending and is flagged (D-086).
+- **Simulated is not deployable.** It is not registered in Production, so configuring it there fails startup (D-084). Production leaves `Payments__Provider` empty until a real adapter is added; provider keys will be secrets like any other.
+
 ## 7. Secrets & configuration
 
 - No secrets in source control. `.env.example` / `appsettings*.json` contain placeholders only.
 - Development: `dotnet user-secrets` or `.env` (git-ignored). Production: platform secret store injected as env vars.
-- Secrets: `Jwt__SigningKey`, `PublicBooking__TokenKey`, `ConnectionStrings__Postgres`, `ConnectionStrings__Redis`, `DEV_ADMIN_PASSWORD` (dev only), `Notifications__Email__SmtpPassword` (when the relay needs auth), payment provider keys (Phase 10).
+- Secrets: `Jwt__SigningKey`, `PublicBooking__TokenKey`, `ConnectionStrings__Postgres`, `ConnectionStrings__Redis`, `DEV_ADMIN_PASSWORD` (dev only), `Notifications__Email__SmtpPassword` (when the relay needs auth), `Payments__Simulated__WebhookSecret` (optional, non-Production only; random per process when unset), and the keys of a real payment provider once one is added.
 - Startup fails fast if required secrets are missing or too weak (signing key and public booking token key < 32 bytes or still a `change-me` placeholder).
 
 ## 8. Logging & sensitive data
@@ -143,9 +158,9 @@ Audited actions include: login success/failure (security log), booking create/mo
 - Erasure via anonymisation (bookings remain for business records without PII).
 - Data retention per `DATABASE.md` §8.
 
-## 11. Future: payments and integrations
+## 11. Future: integrations
 
-- Payment webhooks (Phase 10): signature verification per provider, idempotent processing keyed by provider event id, audit trail, replay window checks.
+- Payment webhooks: implemented in Phase 10 (see §6 Payments). A real provider adds its own signature scheme behind `IPaymentProvider.VerifyWebhook`, plus IP allow-listing where the provider publishes ranges.
 - External API clients: per-tenant API keys (hashed, scoped, revocable, rate-limited) — later phase.
 
 ## 12. Phase 2 implementation notes

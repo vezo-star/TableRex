@@ -56,11 +56,14 @@ Public endpoints never include internal ids such as `conflictingResourceIds`.
 | OUTSIDE_BOOKING_WINDOW | 422 |
 | CONTACT_BOOKING_LIMIT | 422 |
 | CANCELLATION_NOT_ALLOWED | 422 |
+| PAYMENT_NOT_PAYABLE | 422 |
+| REFUND_NOT_ALLOWED | 422 |
 | UNAUTHORIZED | 401 |
+| INVALID_WEBHOOK_SIGNATURE | 401 |
 | INVALID_CREDENTIALS | 401 |
 | ACCOUNT_LOCKED | 423 |
 | FORBIDDEN | 403 |
-| TENANT_NOT_FOUND / VENUE_NOT_FOUND / RESOURCE_NOT_FOUND / BOOKING_NOT_FOUND / CUSTOMER_NOT_FOUND / HOLD_NOT_FOUND | 404 |
+| TENANT_NOT_FOUND / VENUE_NOT_FOUND / RESOURCE_NOT_FOUND / BOOKING_NOT_FOUND / CUSTOMER_NOT_FOUND / HOLD_NOT_FOUND / PAYMENT_NOT_FOUND | 404 |
 | RESOURCE_NOT_AVAILABLE | 409 |
 | BOOKING_ALREADY_CANCELLED | 409 |
 | INVALID_STATUS_TRANSITION | 409 |
@@ -69,6 +72,7 @@ Public endpoints never include internal ids such as `conflictingResourceIds`.
 | HOLD_EXPIRED | 410 |
 | RATE_LIMITED | 429 |
 | INTERNAL_ERROR | 500 (generic message, no exception details) |
+| PAYMENT_UNAVAILABLE | 503 (deposit needed but online payments are off or the provider is down) |
 
 Cross-tenant access returns **404** (not 403) so existence of other tenants' records is not revealed.
 
@@ -242,7 +246,7 @@ Create request:
 }
 ```
 
-`allocation.mode`: `AUTO` (best fit, default), `RESOURCES` (explicit ids), `COMBINATION` (`combinationId`). `customer` may instead contain new-customer details `{ firstName, lastName?, email?, phone? }` — an existing customer with the same email is reused (D-049); `WALK_IN` bookings may omit `customer`. `source` ∈ STAFF (default), PHONE, WALK_IN; `status` ∈ CONFIRMED (default; SEATED for `WALK_IN`), PENDING, HELD, SEATED. `durationMinutes` defaults to the venue default.
+`allocation.mode`: `AUTO` (best fit, default), `RESOURCES` (explicit ids), `COMBINATION` (`combinationId`). `customer` may instead contain new-customer details `{ firstName, lastName?, email?, phone? }` — an existing customer with the same email is reused (D-049); `WALK_IN` bookings may omit `customer`. `source` ∈ STAFF (default), PHONE, WALK_IN; `status` ∈ CONFIRMED (default; SEATED for `WALK_IN`), PENDING, SEATED (`HELD` is reserved for public bookings awaiting a deposit, D-085; staff bookings never require one, D-087). `durationMinutes` defaults to the venue default.
 
 Responses: 201 with the booking (`Location` header); 400 validation; 404 `VENUE_NOT_FOUND` / `RESOURCE_NOT_FOUND` / `CUSTOMER_NOT_FOUND`; 409 `RESOURCE_NOT_AVAILABLE` (explicit allocations include `conflictingResourceIds`); 422 `OUTSIDE_OPERATING_HOURS` (must fit one operating period), `INVALID_BOOKING_TIME` (ends in the past), `PARTY_SIZE_NOT_SUPPORTED`.
 
@@ -284,6 +288,24 @@ Body (create/update): `{ firstName, lastName?, email?, phone?, notes?, marketing
 
 Newest first, tenant-scoped, keyset-paged: `{ items: [{ id, entityType, entityId, action, userId, userEmail, userDisplayName, oldValues, newValues, ip, userAgent, correlationId, createdAt }], nextCursor }`. Pass `nextCursor` as `before` for the next page (`limit` 1–100, default 50); a malformed cursor → 400.
 
+### Payments (Phase 10 — implemented)
+
+| Method | Path | Permission |
+|---|---|---|
+| GET / PUT | `/api/v1/venues/{venueId}/payment-settings` | venue.view / venue.manage |
+| GET | `/api/v1/bookings/{bookingId}/payments` | payment.view (OWNER, ADMIN, MANAGER, HOST) |
+| POST | `/api/v1/bookings/{bookingId}/payments/{paymentId}/refunds` | payment.refund (OWNER, ADMIN, MANAGER); `Idempotency-Key` required → 201 |
+| POST | `/api/v1/payments/webhooks/{provider}` | anonymous, authenticated by the provider's signature; `payment-webhook` 600/min; body ≤ 64 KB |
+| POST | `/api/v1/payments/simulated/complete` | anonymous; Development/Test only (404 otherwise); `payment-simulated` 30/min |
+
+Settings body: `{ depositPolicy: NONE | PER_BOOKING | PER_GUEST, depositAmountMinor, currency, paymentWindowMinutes }`. The amount is minor units (cents): required and 100–10 000 000 unless `NONE`, when it must be null. Currency is ISO 4217 and the window is 5–1440 minutes. The response adds `venueId` and `onlinePaymentsAvailable` (false when `Payments:Provider` is empty).
+
+Payment: `{ id, bookingId, purpose: DEPOSIT, provider, providerReference, amountMinor, currency, status: CREATED | PENDING | SUCCEEDED | FAILED | CANCELLED | EXPIRED, refundedAmountMinor, refundableAmountMinor, failureReason, requiresAttention, expiresAt, succeededAt, createdAt, refunds: [{ id, amountMinor, status: PENDING | SUCCEEDED | FAILED, reason, failureReason, createdAt, completedAt }] }`. `requiresAttention` is set by a wrong amount or currency, by money arriving for a cancelled or expired booking, or by a refund with an unknown outcome (D-083, D-086).
+
+Refund body: `{ amountMinor?, reason? }`. When `amountMinor` is omitted, everything still refundable is refunded. A payment that is not `SUCCEEDED`, or an amount above what is refundable (pending refunds count against it), gives 422 `REFUND_NOT_ALLOWED`. When the provider is down, the refund is created as `PENDING` and the payment is flagged.
+
+Webhooks: an unknown provider is 404 and a bad signature or replayed timestamp is 401 `INVALID_WEBHOOK_SIGNATURE`. A valid delivery answers 200 `{ received, applied }`, including duplicates and unmatched events, so providers stop retrying. The audit trail records `payment.checkout_started`, `payment.succeeded`, `payment.failed`, `payment.flagged`, `payment.refund_requested`, `payment.refunded`, `payment.refund_failed` and `payment.settings.updated`.
+
 ### Reports (Phase 11)
 
 | Method | Path | Permission |
@@ -301,6 +323,9 @@ Newest first, tenant-scoped, keyset-paged: `{ items: [{ id, entityType, entityId
 | POST | `/api/v1/public/{tenantSlug}/{venueSlug}/bookings` | `public-booking` 10 per 10 min | `Idempotency-Key` required; 201 with `Cache-Control: no-store`; replay adds `Idempotent-Replayed: true` |
 | GET | `/api/v1/public/booking` | `public-manage` 60/min | Header `X-Booking-Token: <manage token>` |
 | POST | `/api/v1/public/booking/cancel` | `public-cancel` 10 per 10 min | Header `X-Booking-Token`; cancels within the venue's online cutoff |
+| POST | `/api/v1/public/booking/payment` | `public-payment` 10 per 10 min | Header `X-Booking-Token`; starts the deposit checkout → `{ redirectUrl }` (no-store). 422 `PAYMENT_NOT_PAYABLE` when nothing is due or the hold expired; 503 `PAYMENT_UNAVAILABLE` when the provider is down |
+
+Deposits (Phase 10): the venue response includes `deposit: { policy, amountMinor, currency, paymentWindowMinutes }`, or null when no deposit is required. At a deposit venue a new booking is `HELD` until `now + paymentWindowMinutes`. The confirmation and the manage view then include `payment: { status, amountMinor, currency, payBy, canPay }`. A successful payment confirms the booking. An unpaid one is released by the Worker (D-085). When online payments are off, creating a booking at a deposit venue is 503 `PAYMENT_UNAVAILABLE` and nothing is written (D-087).
 
 Request body for `POST .../bookings`:
 

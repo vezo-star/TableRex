@@ -163,6 +163,31 @@ Completion notes (2026-10-05):
 
 Build: provider-independent `IPaymentProvider`, payment intents, deposits, payment status, refunds, webhook ingestion (authenticated, idempotent, audited), `HELD` booking expiry on unpaid deposit. No concrete provider unless instructed (PayFast, Peach Payments, Ozow later).
 
+Completion notes (2026-10-05):
+- Backend:
+  - Schema and permissions: V030 (`venue_payment_settings`, `payments`, `payment_refunds`, `payment_webhook_events`; `payment.view` and `payment.refund`).
+  - Application: `IPaymentProvider`/`IPaymentProviderRegistry` and `PaymentService` (settings, deposit quote, checkout, webhooks, refunds in three phases). `BookingTransitions` was extracted from `BookingService` so the Api, webhooks and the Worker share one transition path. `DepositExpiryService` runs in the Worker's housekeeping tick.
+  - Simulated provider for Development/Test only: HMAC-signed webhooks, a random secret unless configured, and a checkout page in the SPA.
+  - Public deposit flow: `HELD` plus a `CREATED` payment in the booking transaction, `POST /public/booking/payment`, and 503 `PAYMENT_UNAVAILABLE` when payments are off.
+  - Endpoints: staff payments list and refund, payment settings, and webhooks.
+  - Verification: Release build has 0 warnings and all 282 backend tests pass. New: 3 `PaymentTests`, 2 resilience tests, payment unit tests, and the role matrix count.
+- Frontend:
+  - New screens: a "Deposits" tab in venue settings; a deposit notice and "Continue to deposit" on the public page; `DepositPayCard` on the confirmation and manage pages; `/booking/payment-return` (restores the parked token); `/pay/simulated`; a "Payments" tab in the booking drawer with a refund dialog (idempotency key, partial amounts, unknown-outcome warning).
+  - Verification: all 210 Vitest tests pass (20 new); ESLint, Prettier and `quasar build` are clean.
+- Browser check (dev stack, throwaway admin and guests):
+  - Demo Restaurant set to R50 per guest with a 5-minute window, audited.
+  - At 360 px: Tuesday 19:00 for 2 showed the deposit notice and became `BK-20261006-000008` (`HELD`, R100). Pay went to the Simulated checkout; the return URL carried no token.
+  - A declined card came back to the manage page as "Payment failed" and still payable. Paying again confirmed the booking (history "Deposit paid.", two webhook events `APPLIED`, audit trail complete), and the confirmation email arrived in Mailpit.
+  - Staff refunded R40 of the R100 from the drawer (refund `SUCCEEDED`, `refunded_amount_minor` 4000, audit `payment.refund_requested`/`payment.refunded`).
+  - An unpaid second booking (`BK-20261006-000009`) was cancelled by the Worker 30 s after its 5-minute window ("Deposit not paid in time.", allocation released `EXPIRED`, payment `EXPIRED`), and the cancellation email arrived.
+- Found and fixed:
+  - The Api hung at startup: `Validate<IEnumerable<IPaymentProvider>>` resolved providers while the options factory was being built, and providers depend on `IOptions<PaymentOptions>`. It is now a lazy `IValidateOptions` (`PaymentProviderAvailableValidator`), and the provider reads the base URL per call.
+  - `parseSimulatedCheckout` accepted a link without an amount.
+  - Expected 503s were logged as unhandled errors with stack traces.
+  - API.md claimed staff could create `HELD` bookings.
+- Not built: a real provider adapter (Phase 10 instruction), automatic reconciliation of `requires_attention` payments (needs a real provider API), and payment purposes other than deposits.
+- Decisions: D-082 – D-087.
+
 ## Phase 11 — SaaS Features
 
 Plans, tenant/venue/staff/resource limits, branding, custom booking pages, tenant settings, usage metrics, reporting read models, analytics. Kept outside the core booking domain.
