@@ -25,8 +25,10 @@ public static class ValidatorExtensions
         throw new ValidationAppException(errors);
     }
 
+    /// <summary>Camel-cases every segment of a property path: <c>Rules.MaxPartySize</c> → <c>rules.maxPartySize</c>.</summary>
     private static string ToCamelCase(string propertyName) =>
-        string.IsNullOrEmpty(propertyName) || char.IsLower(propertyName[0])
+        string.IsNullOrEmpty(propertyName)
             ? propertyName
-            : char.ToLowerInvariant(propertyName[0]) + propertyName[1..];
+            : string.Join('.', propertyName.Split('.').Select(segment =>
+                segment.Length == 0 || char.IsLower(segment[0]) ? segment : char.ToLowerInvariant(segment[0]) + segment[1..]));
 }

@@ -1,3 +1,5 @@
+using BookingPlatform.Application.Common.Errors;
+using BookingPlatform.Application.Common.Validation;
 using BookingPlatform.Application.Venues;
 using BookingPlatform.Domain.Time;
 using BookingPlatform.Domain.Venues;
@@ -234,6 +236,17 @@ public sealed class VenueValidatorTests
         var rules = VenueBookingRules.Default with { MinPartySize = 10, MaxPartySize = 4 };
 
         new CreateVenueRequestValidator().Validate(Venue(rules: rules)).IsValid.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Nested_error_keys_are_camel_cased_in_every_segment()
+    {
+        var rules = VenueBookingRules.Default with { SlotIntervalMinutes = 7 };
+
+        var act = () => new CreateVenueRequestValidator().EnsureValidAsync(Venue(rules: rules), CancellationToken.None);
+
+        var error = (await act.Should().ThrowAsync<ValidationAppException>()).Which;
+        error.Errors.Keys.Should().Contain("rules.slotIntervalMinutes");
     }
 
     [Fact]
