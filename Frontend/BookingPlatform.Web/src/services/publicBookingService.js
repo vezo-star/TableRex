@@ -11,6 +11,12 @@ const venuePath = (tenantSlug, venueSlug) => `/v1/public/${slug(tenantSlug)}/${s
 const tokenHeaders = (token) => ({ [HttpHeaders.BOOKING_TOKEN]: token })
 
 export const publicBookingService = {
+  /** The business's bookable locations and branding. */
+  async tenant(tenantSlug, { signal } = {}) {
+    const { data } = await http.get(`/v1/public/${slug(tenantSlug)}`, { ...ANONYMOUS, signal })
+    return data
+  },
+
   async venue(tenantSlug, venueSlug, { signal } = {}) {
     const { data } = await http.get(venuePath(tenantSlug, venueSlug), { ...ANONYMOUS, signal })
     return data

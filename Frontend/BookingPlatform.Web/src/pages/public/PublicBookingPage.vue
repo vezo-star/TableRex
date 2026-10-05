@@ -1,5 +1,5 @@
 <template>
-  <q-page class="public-page q-pa-md">
+  <q-page class="public-page q-pa-md" :style="themeStyle">
     <div class="public-column">
       <div v-if="loading" class="flex flex-center q-pa-xl" data-test="venue-loading">
         <q-spinner size="lg" color="primary" />
@@ -13,8 +13,19 @@
       />
 
       <template v-else-if="venue">
-        <header class="q-mb-md" data-test="venue-header">
-          <div class="text-caption text-grey-7">{{ venue.tenantName }}</div>
+        <BrandHeader
+          :branding="venue.branding"
+          :business-name="venue.tenantName"
+          :show-intro="!confirmation"
+          data-test="venue-header"
+        >
+          <router-link
+            class="text-caption text-grey-7 tenant-link"
+            :to="{ name: RouteNames.PUBLIC_TENANT, params: { tenantSlug } }"
+            data-test="tenant-link"
+          >
+            {{ venue.tenantName }}
+          </router-link>
           <h1 class="text-h5 q-my-xs">{{ venue.name }}</h1>
           <div v-if="addressLine" class="text-body2 text-grey-8">
             <q-icon name="place" size="xs" /> {{ addressLine }}
@@ -22,7 +33,7 @@
           <p v-if="venue.description" class="text-body2 q-mt-sm q-mb-none">
             {{ venue.description }}
           </p>
-        </header>
+        </BrandHeader>
 
         <!-- Confirmation -->
         <q-card v-if="confirmation" flat bordered data-test="booking-confirmation">
@@ -300,6 +311,13 @@
                   </template>
                   <template v-else>You can cancel online until your booking starts.</template>
                 </div>
+                <div
+                  v-if="venue.branding?.bookingTerms"
+                  class="text-caption text-grey-8 booking-terms"
+                  data-test="booking-terms"
+                >
+                  {{ venue.branding.bookingTerms }}
+                </div>
                 <q-btn
                   type="submit"
                   color="primary"
@@ -325,7 +343,10 @@ import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useQuasar, copyToClipboard } from 'quasar'
 import ErrorState from '@/components/common/ErrorState.vue'
 import DepositPayCard from '@/components/payments/DepositPayCard.vue'
+import BrandHeader from '@/components/public/BrandHeader.vue'
+import { RouteNames } from '@/constants/navigation.js'
 import { publicBookingService, manageBookingUrl } from '@/services/publicBookingService.js'
+import { brandStyle } from '@/utils/branding.js'
 import { depositNotice } from '@/utils/payments.js'
 import { createIdempotencyKeeper, isRetryableFailure } from '@/services/idempotency.js'
 import { normaliseError } from '@/utils/problemDetails.js'
@@ -367,6 +388,7 @@ const keeper = createIdempotencyKeeper()
 let timesController = null
 
 const partyOptions = computed(() => partySizeOptions(venue.value))
+const themeStyle = computed(() => brandStyle(venue.value?.branding))
 
 const addressLine = computed(() =>
   [venue.value?.addressLine1, venue.value?.city].filter(Boolean).join(', '),
@@ -545,6 +567,17 @@ onBeforeUnmount(() => timesController?.abort())
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
   gap: 8px;
+}
+.booking-terms {
+  white-space: pre-line;
+  border-left: 3px solid rgba(0, 0, 0, 0.12);
+  padding-left: 8px;
+}
+.tenant-link {
+  text-decoration: none;
+}
+.tenant-link:hover {
+  text-decoration: underline;
 }
 .hp-field {
   position: absolute;

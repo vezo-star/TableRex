@@ -34,6 +34,7 @@ function router() {
     history: createMemoryHistory(),
     routes: [
       { path: '/', component: BlankComponent },
+      { path: '/book/:tenantSlug', name: 'public-tenant', component: BlankComponent },
       { path: '/book/:tenantSlug/:venueSlug', name: 'public-booking', component: BlankComponent },
       { path: '/booking/manage', name: 'public-manage-booking', component: BlankComponent },
     ],

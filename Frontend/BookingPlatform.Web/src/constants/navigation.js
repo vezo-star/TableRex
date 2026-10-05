@@ -20,8 +20,10 @@ export const RouteNames = Object.freeze({
   RESOURCES: 'resources',
   FLOOR_PLANS: 'floor-plans',
   SETTINGS: 'settings',
+  REPORTS: 'reports',
   PLATFORM_TENANTS: 'platform-tenants',
   SYSTEM_STATUS: 'system-status',
+  PUBLIC_TENANT: 'public-tenant',
   PUBLIC_BOOKING: 'public-booking',
   PUBLIC_MANAGE_BOOKING: 'public-manage-booking',
   PAYMENT_RETURN: 'payment-return',
@@ -49,6 +51,12 @@ export const dashboardNavigation = Object.freeze([
     icon: 'event_available',
     to: { name: RouteNames.AVAILABILITY },
     permission: Permissions.BOOKING_VIEW,
+  },
+  {
+    label: 'Reports',
+    icon: 'insights',
+    to: { name: RouteNames.REPORTS },
+    permission: Permissions.REPORTS_VIEW,
   },
   {
     label: 'Floor plans',

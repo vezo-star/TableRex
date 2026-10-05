@@ -62,6 +62,11 @@
         </div>
       </q-form>
     </q-card>
+
+    <div v-if="tenant" class="settings-grid q-mt-md">
+      <PlanUsageCard />
+      <BrandingSettingsCard :tenant-slug="tenant.slug" />
+    </div>
   </q-page>
 </template>
 
@@ -69,6 +74,8 @@
 import { onMounted, reactive, ref } from 'vue'
 import { useQuasar } from 'quasar'
 import ErrorState from '@/components/common/ErrorState.vue'
+import BrandingSettingsCard from '@/components/settings/BrandingSettingsCard.vue'
+import PlanUsageCard from '@/components/settings/PlanUsageCard.vue'
 import { tenancyService } from '@/services/tenancyService.js'
 import { useApiAction } from '@/composables/useApiAction.js'
 import { normaliseError } from '@/utils/problemDetails.js'
@@ -121,5 +128,12 @@ onMounted(load)
 .settings-card {
   max-width: 560px;
   position: relative;
+}
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+  align-items: start;
+  max-width: 1140px;
 }
 </style>

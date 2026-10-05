@@ -75,6 +75,12 @@ const routes = [
         meta: { permission: Permissions.FLOORPLAN_VIEW },
       },
       {
+        path: 'reports',
+        name: RouteNames.REPORTS,
+        component: () => import('@/pages/reports/ReportsPage.vue'),
+        meta: { permission: Permissions.REPORTS_VIEW },
+      },
+      {
         path: 'settings',
         name: RouteNames.SETTINGS,
         component: () => import('@/pages/settings/TenantSettingsPage.vue'),
@@ -163,6 +169,12 @@ const routes = [
     component: () => import('@/layouts/PublicLayout.vue'),
     meta: { public: true },
     children: [
+      {
+        path: 'book/:tenantSlug',
+        name: RouteNames.PUBLIC_TENANT,
+        component: () => import('@/pages/public/PublicTenantPage.vue'),
+        props: true,
+      },
       {
         path: 'book/:tenantSlug/:venueSlug',
         name: RouteNames.PUBLIC_BOOKING,
