@@ -24,6 +24,7 @@ npm-debug.log*
 coverage/
 test-results/
 playwright-report/
+.e2e-state/
 
 # IDE / OS
 .vs/
