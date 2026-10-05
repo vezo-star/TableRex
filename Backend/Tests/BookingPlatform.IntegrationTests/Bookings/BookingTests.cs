@@ -111,7 +111,7 @@ public sealed class BookingTests(InfrastructureFixture fixture) : ApiTestBase(fi
         (await CountAsync("SELECT count(*) FROM bookings")).Should().Be(1);
         (await CountAsync("SELECT count(*) FROM customers")).Should().Be(1, "the failed requests rolled back their new customers");
         (await CountAsync("SELECT count(*) FROM idempotency_keys")).Should().Be(1, "failed requests roll back their key so a retry re-executes");
-        (await CountAsync("SELECT count(*) FROM outbox_messages WHERE destination = 'REALTIME'")).Should().Be(1);
+        (await CountAsync("SELECT count(*) FROM outbox_messages WHERE destination = 'REALTIME' AND type LIKE 'Booking%'")).Should().Be(1);
 
         var adjacent = await s.CreateBookingAsync(s.Booking("21:00", 2, Resources(s.T1)));
         adjacent.StatusCode.Should().Be(HttpStatusCode.Created, "[19:00, 21:00) and [21:00, 23:00) only touch");

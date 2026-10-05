@@ -1,7 +1,9 @@
 using BookingPlatform.Application.Common.Auditing;
 using BookingPlatform.Application.Common.Errors;
+using BookingPlatform.Application.Common.Outbox;
 using BookingPlatform.Application.Common.Persistence;
 using BookingPlatform.Application.Common.Security;
+using BookingPlatform.Application.Common.Time;
 using BookingPlatform.Application.Common.Validation;
 using FluentValidation;
 
@@ -12,6 +14,8 @@ public sealed class FloorPlanService(
     IResourceRepository resources,
     IVenueAccessGuard guard,
     IAuditWriter audit,
+    IOutboxWriter outbox,
+    IClock clock,
     IUnitOfWork unitOfWork,
     ITenantContext tenantContext,
     IValidator<CreateFloorPlanRequest> createValidator,
@@ -40,6 +44,7 @@ public sealed class FloorPlanService(
             var created = (await floorPlans.GetAsync(tenantId, id, cancellationToken))!;
             await audit.WriteAsync(new AuditEntry(tenantId, "floor_plan", id, AuditActions.Created,
                 NewValues: new { created.VenueId, created.Name, created.Width, created.Height }), cancellationToken);
+            await PublishAsync(tenantId, created.VenueId, id, cancellationToken);
             return created;
         }, cancellationToken);
     }
@@ -57,6 +62,7 @@ public sealed class FloorPlanService(
             await audit.WriteAsync(new AuditEntry(tenantId, "floor_plan", id, AuditActions.Updated,
                 new { before.Name, before.Width, before.Height, before.SortOrder, before.IsActive },
                 new { after.Name, after.Width, after.Height, after.SortOrder, after.IsActive }), cancellationToken);
+            await PublishAsync(tenantId, before.VenueId, id, cancellationToken);
             return after;
         }, cancellationToken);
     }
@@ -71,6 +77,7 @@ public sealed class FloorPlanService(
             await floorPlans.DeleteAsync(tenantId, id, cancellationToken);
             await audit.WriteAsync(new AuditEntry(tenantId, "floor_plan", id, AuditActions.Deleted,
                 new { before.VenueId, before.Name, positions = before.Positions.Count }, null), cancellationToken);
+            await PublishAsync(tenantId, before.VenueId, id, cancellationToken);
         }, cancellationToken);
     }
 
@@ -99,9 +106,13 @@ public sealed class FloorPlanService(
             var after = (await floorPlans.GetAsync(tenantId, id, cancellationToken))!;
             await audit.WriteAsync(new AuditEntry(tenantId, "floor_plan", id, AuditActions.Moved,
                 new { positions = plan.Positions.Count }, new { positions = after.Positions.Count }), cancellationToken);
+            await PublishAsync(tenantId, plan.VenueId, id, cancellationToken);
             return after;
         }, cancellationToken);
     }
+
+    private Task PublishAsync(Guid tenantId, Guid venueId, Guid floorPlanId, CancellationToken cancellationToken) =>
+        outbox.WriteRealtimeAsync(tenantId, RealtimeEvents.FloorPlanUpdated, venueId, floorPlanId, null, null, clock.UtcNow, cancellationToken);
 
     private async Task<FloorPlanDto> GetAccessibleAsync(Guid id, CancellationToken cancellationToken)
     {

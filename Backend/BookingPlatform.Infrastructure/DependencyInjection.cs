@@ -16,6 +16,7 @@ using BookingPlatform.Infrastructure.Auditing;
 using BookingPlatform.Infrastructure.Configuration;
 using BookingPlatform.Infrastructure.HealthChecks;
 using BookingPlatform.Infrastructure.Identity;
+using BookingPlatform.Infrastructure.Outbox;
 using BookingPlatform.Infrastructure.Persistence;
 using BookingPlatform.Infrastructure.RateLimiting;
 using BookingPlatform.Infrastructure.Security;
@@ -101,6 +102,7 @@ public static class DependencyInjection
         services.AddScoped<IBlockRepository, BlockRepository>();
         services.AddScoped<IIdempotencyStore, IdempotencyStore>();
         services.AddScoped<IOutboxWriter, OutboxWriter>();
+        services.AddSingleton<OutboxStore>();
         services.AddScoped<ICustomerRepository, CustomerRepository>();
         services.AddScoped<IAuditLogRepository, AuditLogRepository>();
 

@@ -1,8 +1,10 @@
 using BookingPlatform.Application.Common.Auditing;
 using BookingPlatform.Application.Common.Errors;
+using BookingPlatform.Application.Common.Outbox;
 using BookingPlatform.Application.Common.Pagination;
 using BookingPlatform.Application.Common.Persistence;
 using BookingPlatform.Application.Common.Security;
+using BookingPlatform.Application.Common.Time;
 using BookingPlatform.Application.Common.Validation;
 using FluentValidation;
 
@@ -13,6 +15,8 @@ public sealed class ResourceService(
     IVenueRepository venues,
     IVenueAccessGuard guard,
     IAuditWriter audit,
+    IOutboxWriter outbox,
+    IClock clock,
     IUnitOfWork unitOfWork,
     ITenantContext tenantContext,
     IValidator<CreateResourceTypeRequest> createTypeValidator,
@@ -100,6 +104,7 @@ public sealed class ResourceService(
             var id = await resources.CreateAsync(tenantId, normalised, cancellationToken);
             var created = (await resources.GetAsync(tenantId, id, cancellationToken))!;
             await audit.WriteAsync(new AuditEntry(tenantId, "bookable_resource", id, AuditActions.Created, NewValues: created), cancellationToken);
+            await PublishAsync(tenantId, created.VenueId, id, cancellationToken);
             return created;
         }, cancellationToken);
     }
@@ -123,6 +128,7 @@ public sealed class ResourceService(
             var after = (await resources.GetAsync(tenantId, id, cancellationToken))!;
             await audit.WriteAsync(new AuditEntry(tenantId, "bookable_resource", id,
                 existing.IsActive && !after.IsActive ? AuditActions.Deactivated : AuditActions.Updated, existing, after), cancellationToken);
+            await PublishAsync(tenantId, existing.VenueId, id, cancellationToken);
             return after;
         }, cancellationToken);
     }
@@ -137,9 +143,13 @@ public sealed class ResourceService(
             var result = await resources.DeleteOrDeactivateAsync(tenantId, id, cancellationToken);
             await audit.WriteAsync(new AuditEntry(tenantId, "bookable_resource", id,
                 result.Deleted ? AuditActions.Deleted : AuditActions.Deactivated, existing, null), cancellationToken);
+            await PublishAsync(tenantId, existing.VenueId, id, cancellationToken);
             return result;
         }, cancellationToken);
     }
+
+    private Task PublishAsync(Guid tenantId, Guid venueId, Guid resourceId, CancellationToken cancellationToken) =>
+        outbox.WriteRealtimeAsync(tenantId, RealtimeEvents.ResourceUpdated, venueId, resourceId, null, null, clock.UtcNow, cancellationToken);
 
     private async Task<ResourceDto> GetAccessibleAsync(Guid id, CancellationToken cancellationToken)
     {

@@ -2,6 +2,7 @@ using BookingPlatform.Api.Configuration;
 using BookingPlatform.Api.Errors;
 using BookingPlatform.Api.Health;
 using BookingPlatform.Api.Middleware;
+using BookingPlatform.Api.Realtime;
 using BookingPlatform.Api.Security;
 using BookingPlatform.Application;
 using BookingPlatform.Application.Common.Idempotency;
@@ -56,6 +57,7 @@ builder.Services.AddApplication();
 builder.Services.AddSingleton<IResponseSerializer, ApiResponseSerializer>();
 builder.Services.AddPlatformAuthentication(builder.Configuration);
 builder.Services.AddPlatformHealthChecks();
+builder.Services.AddPlatformRealtime(builder.Configuration);
 builder.Services.AddSingleton<MigrationRunner>();
 
 var app = builder.Build();
@@ -94,6 +96,7 @@ app.UseAuthorization();
 
 app.MapPlatformHealthChecks();
 app.MapControllers();
+app.MapPlatformRealtime();
 
 if (app.Environment.IsDevelopment() && app.Configuration.GetValue<bool>("Database:AutoMigrate"))
 {
