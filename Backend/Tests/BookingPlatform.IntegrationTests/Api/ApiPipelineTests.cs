@@ -102,6 +102,19 @@ public sealed class ApiPipelineTests(UnreachableDependenciesApiFixture fixture) 
         body.RootElement.GetProperty("correlationId").GetString().Should().NotBeNullOrWhiteSpace();
     }
 
+    [Fact]
+    public async Task Transient_database_failure_returns_503_with_retry_after_and_no_details()
+    {
+        var response = await _client.GetAsync("/__tests/errors/database-unreachable", Ct);
+        var raw = await response.Content.ReadAsStringAsync(Ct);
+
+        response.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
+        response.Headers.RetryAfter!.Delta.Should().Be(TimeSpan.FromSeconds(5));
+        raw.Should().NotContainAny("hunter2", "db.internal", "NpgsqlException", " at ");
+        using var body = JsonDocument.Parse(raw);
+        body.RootElement.GetProperty("code").GetString().Should().Be("SERVICE_UNAVAILABLE");
+    }
+
     [Theory]
     [InlineData("/__tests/errors/not-found", HttpStatusCode.NotFound, "VENUE_NOT_FOUND")]
     [InlineData("/__tests/errors/conflict", HttpStatusCode.Conflict, "RESOURCE_NOT_AVAILABLE")]

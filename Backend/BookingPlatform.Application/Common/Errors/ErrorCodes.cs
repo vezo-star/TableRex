@@ -16,6 +16,7 @@ public static class ErrorCodes
     public const string InternalError = "INTERNAL_ERROR";
     public const string BusinessRuleViolation = "BUSINESS_RULE_VIOLATION";
     public const string PayloadTooLarge = "PAYLOAD_TOO_LARGE";
+    public const string ServiceUnavailable = "SERVICE_UNAVAILABLE";
 
     // Authentication and tenancy
     public const string InvalidCredentials = "INVALID_CREDENTIALS";

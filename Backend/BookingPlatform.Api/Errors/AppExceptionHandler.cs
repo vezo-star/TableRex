@@ -1,3 +1,4 @@
+using System.Data.Common;
 using System.Globalization;
 using BookingPlatform.Application.Common.Errors;
 using Microsoft.AspNetCore.Diagnostics;
@@ -7,7 +8,8 @@ namespace BookingPlatform.Api.Errors;
 
 /// <summary>
 /// Converts exceptions into RFC 7807 responses. Expected <see cref="AppException"/>s keep their safe message;
-/// anything else becomes a generic 500 so internal details never reach clients.
+/// transient database failures (connection lost, timeouts) become 503 with Retry-After; anything else becomes a
+/// generic 500 so internal details never reach clients.
 /// </summary>
 public sealed class AppExceptionHandler(IProblemDetailsService problemDetailsService, ILogger<AppExceptionHandler> logger)
     : IExceptionHandler
@@ -39,6 +41,8 @@ public sealed class AppExceptionHandler(IProblemDetailsService problemDetailsSer
             LockedAppException e => Create(StatusCodes.Status423Locked, "Locked", e.Message),
             RateLimitedAppException e => Create(StatusCodes.Status429TooManyRequests, "Too many requests", e.Message),
             ServiceUnavailableAppException e => Create(StatusCodes.Status503ServiceUnavailable, "Service unavailable", e.Message),
+            DbException { IsTransient: true } => Create(
+                StatusCodes.Status503ServiceUnavailable, "Service unavailable", "The service is temporarily unavailable. Please try again shortly."),
             BadHttpRequestException badRequest => Create(badRequest.StatusCode, "Bad request", "The request could not be processed."),
             _ => Create(StatusCodes.Status500InternalServerError, "Internal server error", "An unexpected error occurred."),
         };
@@ -48,6 +52,7 @@ public sealed class AppExceptionHandler(IProblemDetailsService problemDetailsSer
             AppException appException => appException.Code,
             BadHttpRequestException { StatusCode: StatusCodes.Status413PayloadTooLarge } => ErrorCodes.PayloadTooLarge,
             BadHttpRequestException => ErrorCodes.BadRequest,
+            DbException { IsTransient: true } => ErrorCodes.ServiceUnavailable,
             _ => ErrorCodes.InternalError,
         };
 
@@ -62,6 +67,10 @@ public sealed class AppExceptionHandler(IProblemDetailsService problemDetailsSer
         if (exception is RateLimitedAppException rateLimited)
         {
             httpContext.Response.Headers.RetryAfter = rateLimited.RetryAfterSeconds.ToString(CultureInfo.InvariantCulture);
+        }
+        else if (exception is DbException { IsTransient: true })
+        {
+            httpContext.Response.Headers.RetryAfter = "5";
         }
 
         if (exception is ServiceUnavailableAppException)

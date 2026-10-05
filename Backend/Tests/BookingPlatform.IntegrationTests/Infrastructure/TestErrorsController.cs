@@ -1,7 +1,9 @@
 using System.ComponentModel.DataAnnotations;
+using System.Net.Sockets;
 using BookingPlatform.Application.Common.Errors;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Npgsql;
 
 namespace BookingPlatform.IntegrationTests.Infrastructure;
 
@@ -17,6 +19,10 @@ public sealed class TestErrorsController : ControllerBase
 
     [HttpGet("unhandled")]
     public IActionResult Unhandled() => throw new InvalidOperationException(SensitiveDetail);
+
+    [HttpGet("database-unreachable")]
+    public IActionResult DatabaseUnreachable() =>
+        throw new NpgsqlException($"Failed to connect to {SensitiveDetail}", new SocketException((int)SocketError.ConnectionRefused));
 
     [HttpGet("not-found")]
     public IActionResult NotFoundError() => throw new NotFoundAppException("VENUE_NOT_FOUND", "Venue was not found.");
