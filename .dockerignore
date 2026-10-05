@@ -1,0 +1,17 @@
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+**/bin/
+**/obj/
+**/TestResults/
+**/node_modules/
+**/dist/
+**/.quasar/
+**/coverage/
+**/.vs/
+**/.vscode/
+**/.idea/
+docs/
+*.md

@@ -1,0 +1,38 @@
+# Secrets / local environment
+.env
+.env.*
+!.env.example
+*.pfx
+*.pem
+
+# .NET
+bin/
+obj/
+*.user
+*.suo
+TestResults/
+*.trx
+coverage*/
+artifacts/
+
+# Node / frontend
+node_modules/
+dist/
+.quasar/
+*.local
+npm-debug.log*
+coverage/
+test-results/
+playwright-report/
+
+# IDE / OS
+.vs/
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# gitlab-ci-local working files
+.gitlab-ci-local/
