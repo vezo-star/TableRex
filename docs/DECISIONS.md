@@ -129,6 +129,22 @@ Changing an Accepted decision requires the stop-and-explain process in `AGENTS.m
 
 **D-053 — Housekeeping runs in the Worker on fixed intervals.** Accepted. The hold sweep (every 30 s, batches of 500, `FOR UPDATE SKIP LOCKED`) deactivates expired hold allocations, marks the holds EXPIRED and queues `HoldExpired`. An hourly purge deletes expired idempotency keys, refresh tokens 30 days past their family expiry, and PROCESSED outbox rows older than 30 days. DEAD outbox rows are kept for review.
 
+## Phase 6 implementation decisions (2026-10-05)
+
+**D-054 — Customers are tenant-wide.** Accepted. A customer record is shared by all venues of a tenant (one guest, one profile). `bookingCount`/`lastBookingAt` therefore cover every venue, while `GET /customers/{id}/bookings` only lists bookings at venues the caller can access (D-018). Email is unique among active customers per tenant (case-insensitive) → 409 `EMAIL_TAKEN` with the existing `customerId` so the UI can link to it.
+
+**D-055 — Anonymisation erases PII but keeps booking facts.** Accepted. `POST /customers/{id}/anonymize` sets the first name to "Anonymised", clears last name, email, phone, notes and preferences, withdraws marketing consent, stamps `anonymized_at`, and clears `special_requests`/`internal_notes` on that customer's bookings (bumping their version). Booking times, party sizes and statuses stay for reporting. Anonymised customers cannot be edited (422 `CUSTOMER_ANONYMIZED`) or attached to new bookings (404). Customer audit rows record changed field names only, never values.
+
+**D-056 — The board is one request per day; polling until realtime.** Accepted. `GET /bookings/board` returns the schedule, every booking of the business date (capped at 1000, `truncated` flag) and overlapping active blocks, so the timeline, floor and list views share one payload. Until Phase 7 the board and dashboard refresh every 60 s while the tab is visible (the board skips refreshes while the drawer or create dialog is open), and after every local change.
+
+**D-057 — Drag-to-move is limited to single-resource bookings and always confirms.** Accepted. Dragging snaps to the venue slot interval, keeps the board's business date, and sends `time` and/or `allocation: RESOURCES [target]` with the booking `version`; the server stays the authority (409 conflicts are shown and the board reloads). Multi-resource and combination bookings move through the drawer's move form. The floor view selects and creates; it does not drag bookings.
+
+**D-058 — Check-in and seat are not time-restricted.** Accepted for now. Staff can check in or seat a confirmed booking at any time (early arrivals, corrections); only no-show waits for the start (D-051). Whether to restrict seating to the business date is a product question tracked in the deferred list.
+
+**D-059 — Staff journeys are verified by component tests and a scripted browser walkthrough in Phase 6; the Playwright suite lands in Phase 12.** Accepted. Phase 6 adds Vitest component tests for the create dialog (hold, stable idempotency key, refresh after a taken table), drawer (actions by permission, concurrency reload, move payload), block dialog (zone conversion) and board page, and a browser walkthrough (create → drag-move → seat → history → customers → audit). Playwright (`@playwright/test`, a dev dependency) is added in Phase 12 to cover staff and public journeys together against the composed stack.
+
+**D-060 — Audit log uses keyset pagination.** Accepted. Newest first by `(created_at, id)`; `nextCursor` is an opaque base64url `ticks_id` token passed back as `before`. Offsets are avoided because the table only grows and is read newest-first.
+
 ## Risk register
 
 | # | Risk | Impact | Mitigation |

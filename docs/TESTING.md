@@ -107,6 +107,7 @@ Connection with valid token; join own venue; receive BookingCreated/Updated/Canc
 
 - Vitest: `http.js` refresh single-flight and replay, ProblemDetails normalisation, `auth`/`tenant`/`venue` stores, `realtime` store reconnect → resync, `usePermissions`, venue time formatting, booking form validation and idempotency key reuse on retry.
 - Playwright E2E (critical journeys): staff login → create booking → see it on the board; move and cancel; two sessions stay in sync (Phase 7); public booking flow on a mobile viewport (Phase 8); double-submit on public booking creates one booking.
+- Implemented in Phase 6: `utils/bookings.spec.js` (status actions, timeline geometry, snapping, occupancy, `zonedTimeToUtc` incl. DST gap/overlap), `services/bookingService.spec.js` (idempotency key reuse and retryable failures, status command endpoints with versions, board/holds/customers/audit calls), `components/bookingComponents.spec.js` (create dialog: prefill, hold, stable key, release on back, refresh after a taken table, walk-in rule; drawer: actions by status and permission, concurrency reload, changed-fields move; block dialog: zone conversion past midnight) and `pages/bookingBoardPage.spec.js` (loads the URL date with a selected venue, view switching, view-only users). Playwright lands in Phase 12 (D-059); until then staff journeys are verified by a scripted browser walkthrough.
 
 ## 8. CI (GitLab, from Phase 1)
 

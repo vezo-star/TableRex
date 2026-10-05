@@ -112,6 +112,13 @@ Build: DashboardPage (today's summary), BookingBoardPage with Timeline / Floor p
 
 Acceptance: a staff member can operate a venue entirely through the dashboard; E2E staff journeys pass; loading/empty/error states present; responsive on tablet.
 
+Completion notes (2026-10-05):
+- Backend: `GET /bookings/board`, customers CRUD + search + bookings + anonymise, audit log with keyset paging (API.md). Release build 0 warnings; 225 backend tests green (5 new `StaffExperienceTests`: customer CRUD/search/duplicate email/bookings, anonymise incl. booking notes, permissions + tenant isolation, board, audit paging + permissions).
+- Frontend: dashboard (today's numbers, upcoming arrivals, status breakdown), bookings board with Timeline (sections, closed bands, now marker, drag-to-move with confirmation, double-click to create, auto-scroll), Floor (occupancy colours at a chosen time, table details, create here) and List views; booking drawer (status actions by permission, cancel with reason, edit, move form, history); guided create dialog (availability → table → hold → customer search/new/walk-in → details, idempotent retry); block dialog (venue-zone conversion incl. DST); customers list/details/edit/anonymise; audit log viewer. 152 Vitest tests green (32 new), ESLint and Prettier clean, `quasar build` succeeds.
+- Browser walkthrough (throwaway admin, Demo Restaurant): closed Monday shown as closed; Tuesday availability → Table 3 hold ("Held until") → new customer → booking `BK-20261006-000002`; dragged to Table 5 19:30 with confirmation; seated from the drawer; history shows created → moved → seated; list and floor views agree; duplicate customer email offers the existing record; audit log lists the actions.
+- Fixed during verification: the board did not load when the venue was already selected on navigation (watcher order); New booking/Block defaulted to today instead of the board date; timeline section labels scrolled away and booking blocks were not keyboard/screen-reader accessible.
+- Decisions: D-054 – D-060. Playwright staff journeys are scheduled with the public journeys in Phase 12 (D-059). Realtime refresh replaces polling in Phase 7.
+
 ## Phase 7 — Real-time
 
 Build: `VenueHub`, join authorization, realtime outbox dispatcher in Api, Redis backplane, event constants, frontend `realtimeService` + `realtime` store with reconnect/resync, connection status indicator.
@@ -150,6 +157,7 @@ Full review against the checklist in the master specification §67 Phase 12 and 
 |---|---|---|
 | Reinstating CANCELLED/NO_SHOW bookings | Phase 6 review | Requires re-allocation semantics; not in initial status model |
 | Bookings overrunning closing time / out-of-hours staff bookings | Phase 6 review | Needs explicit product rule |
+| Restricting check-in/seat to the booking's business date | Product decision | D-058; staff may seat early today |
 | Recurring resource blocks | Post-MVP | Not required initially |
 | Per-slot pacing / covers limits | Post-MVP | Booking rule extension; engine designed to accept more rules |
 | Tenant custom roles | Phase 11 | System roles suffice initially |

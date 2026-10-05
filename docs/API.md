@@ -245,22 +245,39 @@ History: `{ bookingId, statusHistory: [{ fromStatus, toStatus, source, reason, c
 
 Every write also records audit (no PII or notes) and outbox rows (REALTIME `BookingCreated`/`BookingUpdated`/`BookingMoved`/`BookingCancelled`/`BookingStatusChanged`, NOTIFICATION confirmation/cancellation) in the same transaction.
 
-### Customers (Phase 6)
+### Board (Phase 6 — implemented)
 
 | Method | Path | Permission |
 |---|---|---|
-| GET | `/api/v1/customers?q&page&pageSize` | customer.view (search name/phone/email) |
-| POST | `/api/v1/customers` | customer.manage |
+| GET | `/api/v1/bookings/board?venueId&date` | booking.view (venue must be accessible) |
+
+One venue-local business date for the staff board: `{ venueId, date, timeZone, isClosed, periods: [{ openTime, closeTime, startsAt, endsAt, overnight }], slotIntervalMinutes, turnoverMinutes, bookings: [Booking], blocks: [Block], truncated }`. `bookings` holds every status (the UI filters cancelled/no-show) up to 1000 rows (`truncated: true` beyond that); `blocks` holds active blocks overlapping the day's window. Missing `date` → 400; inaccessible venue → 404 `VENUE_NOT_FOUND`.
+
+### Customers (Phase 6 — implemented)
+
+| Method | Path | Permission |
+|---|---|---|
+| GET | `/api/v1/customers?q&page&pageSize` | customer.view — `q` matches name and email (contains) and phone digits (≥ 3 digits); anonymised customers sort last |
+| POST | `/api/v1/customers` | customer.manage → 201 |
 | GET / PUT | `/api/v1/customers/{id}` | customer.view / customer.manage |
-| GET | `/api/v1/customers/{id}/bookings` | customer.view + booking.view |
-| POST | `/api/v1/customers/{id}/anonymize` | customer.manage (POPIA erasure) |
+| GET | `/api/v1/customers/{id}/bookings?page&pageSize` | customer.view + booking.view — newest first, only bookings at venues the caller can access |
+| POST | `/api/v1/customers/{id}/anonymize` | customer.manage (POPIA erasure, D-055) |
 
-### Audit & reports
+Body (create/update): `{ firstName, lastName?, email?, phone?, notes?, marketingConsent }`. Response: `{ id, firstName, lastName, email, phone, notes, marketingConsent, isAnonymized, anonymizedAt, bookingCount, lastBookingAt, createdAt, updatedAt }` (`bookingCount` counts bookings at all venues of the tenant, D-054). Errors: 409 `EMAIL_TAKEN` (another active customer has the email, case-insensitive; the problem includes `customerId`), 422 `CUSTOMER_ANONYMIZED` (editing an anonymised customer), 404 `CUSTOMER_NOT_FOUND`.
 
-| Method | Path | Permission | Phase |
-|---|---|---|---|
-| GET | `/api/v1/audit-logs?entityType&entityId&from&to&before` | settings.manage | 6 |
-| GET | `/api/v1/reports/...` | reports.view | 11 |
+### Audit log (Phase 6 — implemented)
+
+| Method | Path | Permission |
+|---|---|---|
+| GET | `/api/v1/audit-logs?entityType&entityId&userId&action&from&to&before&limit` | settings.manage |
+
+Newest first, tenant-scoped, keyset-paged: `{ items: [{ id, entityType, entityId, action, userId, userEmail, userDisplayName, oldValues, newValues, ip, userAgent, correlationId, createdAt }], nextCursor }`. Pass `nextCursor` as `before` for the next page (`limit` 1–100, default 50); a malformed cursor → 400.
+
+### Reports (Phase 11)
+
+| Method | Path | Permission |
+|---|---|---|
+| GET | `/api/v1/reports/...` | reports.view |
 
 ## 4. Public API (Phase 8)
 
