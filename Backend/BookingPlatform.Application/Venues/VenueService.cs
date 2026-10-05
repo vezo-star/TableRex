@@ -260,9 +260,13 @@ public sealed class VenueService(
     }
 
     /// <summary>Builds the domain schedule for a venue, including special dates in the window (plus one day either side for overnight periods).</summary>
-    public async Task<OperatingSchedule> LoadScheduleAsync(VenueRef venue, DateOnly from, DateOnly to, CancellationToken cancellationToken)
+    public Task<OperatingSchedule> LoadScheduleAsync(VenueRef venue, DateOnly from, DateOnly to, CancellationToken cancellationToken) =>
+        LoadScheduleAsync(tenantContext.TenantId, venue, from, to, cancellationToken);
+
+    /// <summary>Same as <see cref="LoadScheduleAsync(VenueRef, DateOnly, DateOnly, CancellationToken)"/> for callers without a tenant session (public booking).</summary>
+    public async Task<OperatingSchedule> LoadScheduleAsync(Guid tenantId, VenueRef venue, DateOnly from, DateOnly to, CancellationToken cancellationToken)
     {
-        var tenantId = tenantContext.TenantId;
+        ArgumentNullException.ThrowIfNull(venue);
         var weekly = await venues.ListOperatingHoursAsync(tenantId, venue.Id, cancellationToken);
         var special = await venues.ListSpecialHoursAsync(tenantId, venue.Id, from.AddDays(-1), to.AddDays(1), cancellationToken);
         return new OperatingSchedule(

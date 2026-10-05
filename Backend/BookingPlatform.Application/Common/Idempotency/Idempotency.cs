@@ -29,7 +29,7 @@ public sealed record IdempotencyRequest(string Key, byte[] RequestHash)
 }
 
 /// <summary>A stored response returned instead of re-executing a request (<c>Idempotent-Replayed: true</c>).</summary>
-public sealed record IdempotentReplay(int Status, string Body);
+public sealed record IdempotentReplay(int Status, string Body, Guid? ResourceId = null);
 
 /// <summary>Either the fresh result of an operation or the replay of an earlier one with the same key.</summary>
 public sealed record IdempotentResult<T>(T? Value, IdempotentReplay? Replay)
@@ -84,7 +84,7 @@ public sealed class IdempotencyGuard(IIdempotencyStore store, IResponseSerialize
             throw new ConflictAppException(ErrorCodes.IdempotencyConflict, "A request with this idempotency key is still in progress.");
         }
 
-        return new IdempotentReplay(status, body);
+        return new IdempotentReplay(status, body, existing.ResourceId);
     }
 
     /// <summary>Stores the response in the same transaction as the business change.</summary>

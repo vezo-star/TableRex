@@ -21,7 +21,7 @@ if (-not (Test-Path $EnvFile)) {
 }
 
 $project = [System.IO.Path]::Combine($PSScriptRoot, '..', 'Backend', 'BookingPlatform.Api', 'BookingPlatform.Api.csproj')
-$requiredKeys = @('ConnectionStrings__Postgres', 'ConnectionStrings__Redis', 'Jwt__SigningKey', 'DEV_ADMIN_PASSWORD')
+$requiredKeys = @('ConnectionStrings__Postgres', 'ConnectionStrings__Redis', 'Jwt__SigningKey', 'PublicBooking__TokenKey', 'DEV_ADMIN_PASSWORD')
 $optionalKeys = @('DEV_ADMIN_EMAIL')
 $values = @{}
 

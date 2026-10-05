@@ -54,32 +54,10 @@ public sealed class AvailabilityService(
                 rules.TurnoverBufferMinutes, IsClosed: true, []);
         }
 
-        var resourceRows = (await availability.ListResourcesAsync(tenantId, venue.Id, cancellationToken))
-            .Where(r => r.IsActive)
-            .Where(r => request.SectionId is null || r.SectionId == request.SectionId)
-            .Where(r => request.ResourceTypeId is null || r.ResourceTypeId == request.ResourceTypeId)
-            .ToList();
-        var resources = resourceRows
-            .Select(r => new AvailabilityResource(r.Id, r.Name, r.MinCapacity, r.Capacity, r.SortOrder, r.SectionId))
-            .ToList();
-        var combinations = (await availability.ListActiveCombinationsAsync(tenantId, venue.Id, cancellationToken))
-            .Select(c => new AvailabilityCombination(c.Id, c.Name, c.MinCapacity, c.Capacity, c.SortOrder,
-                c.Members.Select(m => new CombinationMember(m.ResourceId, m.IsRequired)).ToList()))
-            .ToList();
-
-        var duration = Duration.FromMinutes(durationMinutes);
-        var turnover = Duration.FromMinutes(rules.TurnoverBufferMinutes);
-        var windowStart = periods.Min(p => p.Start);
-        var windowEnd = periods.Max(p => p.End) + turnover;
-        var now = clock.UtcNow;
-        var claims = (await availability.ListClaimsAsync(tenantId, venue.Id, windowStart.ToDateTimeUtc(), windowEnd.ToDateTimeUtc(), now, null, cancellationToken))
-            .Select(c => new ResourceClaim(c.ResourceId, Instant.FromDateTimeUtc(DateTime.SpecifyKind(c.StartsAt, DateTimeKind.Utc)),
-                Instant.FromDateTimeUtc(DateTime.SpecifyKind(c.EndsAt, DateTimeKind.Utc))))
-            .ToList();
-
-        var query = new AvailabilityQuery(businessDate, request.PartySize, duration,
-            Duration.FromMinutes(rules.SlotIntervalMinutes), turnover, Instant.FromDateTimeUtc(DateTime.SpecifyKind(now, DateTimeKind.Utc)));
-        var slots = AvailabilityCalculator.Calculate(schedule, query, resources, combinations, claims);
+        var now = Instant.FromDateTimeUtc(DateTime.SpecifyKind(clock.UtcNow, DateTimeKind.Utc));
+        var slots = await CalculateAsync(tenantId, venue, schedule, businessDate, request.PartySize, durationMinutes,
+            r => (request.SectionId is null || r.SectionId == request.SectionId) && (request.ResourceTypeId is null || r.ResourceTypeId == request.ResourceTypeId),
+            onlineOnly: false, now, cancellationToken);
 
         if (request.Time is { } preferred)
         {
@@ -90,6 +68,61 @@ public sealed class AvailabilityService(
 
         return new AvailabilityResponse(venue.Id, request.Date, venue.TimeZone, request.PartySize, durationMinutes,
             rules.TurnoverBufferMinutes, IsClosed: false, slots.Select(ToDto).ToList());
+    }
+
+    /// <summary>
+    /// Guest-facing slots for a business date: default duration, resources and combinations bookable online only, and no
+    /// slot before <paramref name="earliestStart"/> (now + the venue's lead time). Callers enforce the booking window.
+    /// </summary>
+    public Task<IReadOnlyList<AvailabilitySlot>> CalculateOnlineAsync(
+        Guid tenantId, VenueDto venue, OperatingSchedule schedule, LocalDate businessDate, int partySize, Instant earliestStart, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(venue);
+        return CalculateAsync(tenantId, venue, schedule, businessDate, partySize, venue.Rules.DefaultDurationMinutes, _ => true,
+            onlineOnly: true, earliestStart, cancellationToken);
+    }
+
+    private async Task<IReadOnlyList<AvailabilitySlot>> CalculateAsync(
+        Guid tenantId,
+        VenueDto venue,
+        OperatingSchedule schedule,
+        LocalDate businessDate,
+        int partySize,
+        int durationMinutes,
+        Func<AvailabilityResourceRow, bool> resourceFilter,
+        bool onlineOnly,
+        Instant earliestStart,
+        CancellationToken cancellationToken)
+    {
+        var periods = schedule.GetPeriods(businessDate);
+        if (periods.Count == 0)
+        {
+            return [];
+        }
+
+        var rules = venue.Rules;
+        var resources = (await availability.ListResourcesAsync(tenantId, venue.Id, cancellationToken))
+            .Where(r => r.IsActive && (!onlineOnly || r.IsBookableOnline))
+            .Where(resourceFilter)
+            .Select(r => new AvailabilityResource(r.Id, r.Name, r.MinCapacity, r.Capacity, r.SortOrder, r.SectionId))
+            .ToList();
+        var combinations = (await availability.ListActiveCombinationsAsync(tenantId, venue.Id, cancellationToken))
+            .Where(c => !onlineOnly || c.IsBookableOnline)
+            .Select(c => new AvailabilityCombination(c.Id, c.Name, c.MinCapacity, c.Capacity, c.SortOrder,
+                c.Members.Select(m => new CombinationMember(m.ResourceId, m.IsRequired)).ToList()))
+            .ToList();
+
+        var duration = Duration.FromMinutes(durationMinutes);
+        var turnover = Duration.FromMinutes(rules.TurnoverBufferMinutes);
+        var windowStart = periods.Min(p => p.Start);
+        var windowEnd = periods.Max(p => p.End) + turnover;
+        var claims = (await availability.ListClaimsAsync(tenantId, venue.Id, windowStart.ToDateTimeUtc(), windowEnd.ToDateTimeUtc(), clock.UtcNow, null, cancellationToken))
+            .Select(c => new ResourceClaim(c.ResourceId, Instant.FromDateTimeUtc(DateTime.SpecifyKind(c.StartsAt, DateTimeKind.Utc)),
+                Instant.FromDateTimeUtc(DateTime.SpecifyKind(c.EndsAt, DateTimeKind.Utc))))
+            .ToList();
+
+        var query = new AvailabilityQuery(businessDate, partySize, duration, Duration.FromMinutes(rules.SlotIntervalMinutes), turnover, earliestStart);
+        return AvailabilityCalculator.Calculate(schedule, query, resources, combinations, claims);
     }
 
     private static AvailabilitySlotDto ToDto(AvailabilitySlot slot) => new(

@@ -58,6 +58,8 @@ public static class ErrorCodes
     public const string IdempotencyConflict = "IDEMPOTENCY_CONFLICT";
     public const string HoldExpired = "HOLD_EXPIRED";
     public const string CancellationNotAllowed = "CANCELLATION_NOT_ALLOWED";
+    public const string ContactBookingLimit = "CONTACT_BOOKING_LIMIT";
+    public const string BookingWindow = "OUTSIDE_BOOKING_WINDOW";
 
     // SaaS and payments
     public const string PlanLimitReached = "PLAN_LIMIT_REACHED";

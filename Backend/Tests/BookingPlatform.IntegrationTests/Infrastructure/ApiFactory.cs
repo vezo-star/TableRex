@@ -34,6 +34,7 @@ public sealed class ApiFactory(
             ["ConnectionStrings:Redis"] = redisConnectionString,
             ["Cors:AllowedOrigins:0"] = AllowedOrigin,
             ["Jwt:SigningKey"] = Convert.ToBase64String(RandomNumberGenerator.GetBytes(48)),
+            ["PublicBooking:TokenKey"] = Convert.ToBase64String(RandomNumberGenerator.GetBytes(48)),
             ["RateLimiting:KeyPrefix"] = "test-" + Guid.NewGuid().ToString("N"),
         };
         foreach (var (key, value) in settings ?? new Dictionary<string, string?>())

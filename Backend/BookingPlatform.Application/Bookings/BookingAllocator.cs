@@ -85,9 +85,13 @@ public sealed class BookingAllocator(
         {
             AllocationModes.Resources => [await PlanResourcesAsync(tenantId, venueId, request!.ResourceIds ?? [], partySize, cancellationToken)],
             AllocationModes.Combination => [await PlanCombinationAsync(tenantId, venueId, request!.CombinationId!.Value, partySize, timing, excludeHoldId, cancellationToken)],
-            _ => await PlanAutoAsync(tenantId, venueId, partySize, timing, excludeHoldId, cancellationToken),
+            _ => await PlanAutoAsync(tenantId, venueId, partySize, timing, excludeHoldId, onlineOnly: false, cancellationToken),
         };
     }
+
+    /// <summary>AUTO allocation restricted to resources and combinations that are bookable online (public bookings).</summary>
+    public Task<IReadOnlyList<AllocationCandidate>> PlanOnlineAsync(Guid tenantId, Guid venueId, int partySize, BookingTiming timing, CancellationToken cancellationToken) =>
+        PlanAutoAsync(tenantId, venueId, partySize, timing, null, onlineOnly: true, cancellationToken);
 
     /// <summary>Validates explicit resources: same venue, active, and able to seat the party.</summary>
     public async Task<AllocationCandidate> PlanResourcesAsync(Guid tenantId, Guid venueId, IReadOnlyList<Guid> resourceIds, int partySize, CancellationToken cancellationToken)
@@ -143,13 +147,16 @@ public sealed class BookingAllocator(
     }
 
     private async Task<IReadOnlyList<AllocationCandidate>> PlanAutoAsync(
-        Guid tenantId, Guid venueId, int partySize, BookingTiming timing, Guid? excludeHoldId, CancellationToken cancellationToken)
+        Guid tenantId, Guid venueId, int partySize, BookingTiming timing, Guid? excludeHoldId, bool onlineOnly, CancellationToken cancellationToken)
     {
-        var resourceRows = (await availability.ListResourcesAsync(tenantId, venueId, cancellationToken)).Where(r => r.IsActive).ToList();
+        var resourceRows = (await availability.ListResourcesAsync(tenantId, venueId, cancellationToken))
+            .Where(r => r.IsActive && (!onlineOnly || r.IsBookableOnline))
+            .ToList();
         var candidates = resourceRows
             .Select(r => new AvailabilityResource(r.Id, r.Name, r.MinCapacity, r.Capacity, r.SortOrder, r.SectionId))
             .ToList();
         var combinations = (await availability.ListActiveCombinationsAsync(tenantId, venueId, cancellationToken))
+            .Where(c => !onlineOnly || c.IsBookableOnline)
             .Select(c => new AvailabilityCombination(c.Id, c.Name, c.MinCapacity, c.Capacity, c.SortOrder,
                 c.Members.Select(m => new CombinationMember(m.ResourceId, m.IsRequired)).ToList()))
             .ToList();

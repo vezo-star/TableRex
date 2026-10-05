@@ -88,6 +88,24 @@ public sealed partial class BookingService(
 
         var source = request.Source ?? BookingSource.Staff;
         var status = request.Status ?? (source == BookingSource.WalkIn ? BookingStatus.Seated : BookingStatus.Confirmed);
+        var creation = new BookingCreation(tenantId, venue, timing, request, source, status, HistorySources.Staff, userId, scope);
+        return await CreateCoreAsync(creation, idempotencyRequest, ToDto, dto => dto, cancellationToken);
+    }
+
+    /// <summary>
+    /// The create transaction shared by staff and public bookings: idempotency claim, customer, booking row, allocation
+    /// (the exclusion constraint decides), history, event, audit and outbox — committed together or not at all.
+    /// </summary>
+    internal async Task<IdempotentResult<TResult>> CreateCoreAsync<TResult>(
+        BookingCreation creation,
+        IdempotencyRequest idempotencyRequest,
+        Func<BookingRecord, TResult> map,
+        Func<TResult, object> storedResponse,
+        CancellationToken cancellationToken)
+        where TResult : class
+    {
+        var (tenantId, venue, timing, request, source, status, historySource, userId, scope) = creation;
+        var bookingId = creation.BookingId;
 
         return await TransientRetry.ExecuteAsync(
             () => unitOfWork.ExecuteAsync(async () =>
@@ -95,19 +113,28 @@ public sealed partial class BookingService(
                 var replay = await idempotency.BeginAsync(tenantId, scope, idempotencyRequest, cancellationToken);
                 if (replay is not null)
                 {
-                    return new IdempotentResult<BookingDto>(null, replay);
+                    return new IdempotentResult<TResult>(null, replay);
                 }
 
                 var now = clock.UtcNow;
-                var customerId = await ResolveCustomerAsync(tenantId, request.Customer, cancellationToken);
+                var customerId = await ResolveCustomerAsync(tenantId, request.Customer, creation.MarketingConsent, cancellationToken);
+                if (creation.MaxActiveBookingsPerCustomer is { } maxActive && customerId is { } existingCustomer
+                    && await bookings.CountActiveUpcomingAsync(tenantId, venue.Id, existingCustomer, now, cancellationToken) >= maxActive)
+                {
+                    throw new BusinessRuleAppException(ErrorCodes.ContactBookingLimit,
+                        "There are already several upcoming bookings for these contact details. Contact the venue to book more.");
+                }
+
                 var hold = request.HoldToken is { } token
                     ? await LockHoldForConversionAsync(tenantId, venue.Id, token, timing, now, cancellationToken)
                     : null;
 
-                var bookingId = Guid.CreateVersion7();
                 var reference = BookingReference.Format(timing.BusinessDate, await bookings.NextReferenceSequenceAsync(cancellationToken));
                 await bookings.InsertAsync(tenantId, new NewBooking(bookingId, venue.Id, customerId, reference, status, source, request.PartySize,
-                    timing.StartUtc, timing.EndUtc, timing.BusinessDateOnly, Clean(request.SpecialRequests), Clean(request.InternalNotes), userId, now), cancellationToken);
+                    timing.StartUtc, timing.EndUtc, timing.BusinessDateOnly, Clean(request.SpecialRequests), Clean(request.InternalNotes), userId, now)
+                {
+                    PublicTokenHash = creation.PublicTokenHash,
+                }, cancellationToken);
 
                 IReadOnlyList<AllocationCandidate> candidates;
                 if (hold is not null)
@@ -115,6 +142,10 @@ public sealed partial class BookingService(
                     var heldResources = await allocations.ListActiveResourceIdsAsync(tenantId, null, hold.Id, null, cancellationToken);
                     candidates = [await allocator.PlanResourcesAsync(tenantId, venue.Id, heldResources, request.PartySize, cancellationToken)];
                     await allocations.DeactivateAsync(tenantId, null, hold.Id, null, ReleaseReasons.HoldConverted, now, cancellationToken);
+                }
+                else if (creation.OnlineOnly)
+                {
+                    candidates = await allocator.PlanOnlineAsync(tenantId, venue.Id, request.PartySize, timing, cancellationToken);
                 }
                 else
                 {
@@ -130,7 +161,7 @@ public sealed partial class BookingService(
                     await holds.SetStatusAsync(tenantId, hold.Id, "CONVERTED", bookingId, now, cancellationToken);
                 }
 
-                await bookings.WriteStatusHistoryAsync(new StatusHistoryEntry(tenantId, venue.Id, bookingId, null, status, HistorySources.Staff, null, userId), cancellationToken);
+                await bookings.WriteStatusHistoryAsync(new StatusHistoryEntry(tenantId, venue.Id, bookingId, null, status, historySource, null, userId), cancellationToken);
                 await bookings.WriteEventAsync(new BookingEventEntry(tenantId, venue.Id, bookingId, BookingEventTypes.Created, new
                 {
                     reference,
@@ -152,9 +183,9 @@ public sealed partial class BookingService(
                     await outbox.WriteNotificationAsync(tenantId, NotificationTypes.BookingConfirmation, venue.Id, bookingId, now, cancellationToken);
                 }
 
-                var dto = ToDto(created);
-                await idempotency.CompleteAsync(tenantId, scope, idempotencyRequest, 201, dto, bookingId, cancellationToken);
-                return new IdempotentResult<BookingDto>(dto, null);
+                var result = map(created);
+                await idempotency.CompleteAsync(tenantId, scope, idempotencyRequest, 201, storedResponse(result), bookingId, cancellationToken);
+                return new IdempotentResult<TResult>(result, null);
             }, cancellationToken),
             () => BookingAllocator.NotAvailable([]));
     }
@@ -287,9 +318,25 @@ public sealed partial class BookingService(
     private async Task<BookingDto> TransitionAsync(Guid id, BookingCommand command, string? reason, int? version, CancellationToken cancellationToken)
     {
         await GetAccessibleAsync(id, cancellationToken);
-        var tenantId = tenantContext.TenantId;
-        var userId = currentUser.UserId;
+        var after = await TransitionCoreAsync(tenantContext.TenantId, id, command, reason, version, currentUser.UserId, HistorySources.Staff, null, cancellationToken);
+        return ToDto(after);
+    }
 
+    /// <summary>
+    /// Applies a status command under a row lock. <paramref name="precondition"/> runs against the locked booking before
+    /// anything changes (public cancellation uses it for the venue's cancellation policy).
+    /// </summary>
+    internal async Task<BookingRecord> TransitionCoreAsync(
+        Guid tenantId,
+        Guid id,
+        BookingCommand command,
+        string? reason,
+        int? version,
+        Guid? userId,
+        string historySource,
+        Action<BookingRecord>? precondition,
+        CancellationToken cancellationToken)
+    {
         return await TransientRetry.ExecuteAsync(
             () => unitOfWork.ExecuteAsync(async () =>
             {
@@ -306,6 +353,7 @@ public sealed partial class BookingService(
                         $"A {Describe(locked.Status)} booking cannot be {Describe(command)}.");
 
                 var before = await LoadRecordAsync(tenantId, id, cancellationToken);
+                precondition?.Invoke(before);
                 var now = clock.UtcNow;
                 if (command == BookingCommand.NoShow && now < before.StartsAt)
                 {
@@ -329,7 +377,7 @@ public sealed partial class BookingService(
                         break;
                 }
 
-                await bookings.WriteStatusHistoryAsync(new StatusHistoryEntry(tenantId, before.VenueId, id, locked.Status, to, HistorySources.Staff, reason, userId), cancellationToken);
+                await bookings.WriteStatusHistoryAsync(new StatusHistoryEntry(tenantId, before.VenueId, id, locked.Status, to, historySource, reason, userId), cancellationToken);
                 await bookings.WriteEventAsync(new BookingEventEntry(tenantId, before.VenueId, id,
                     command == BookingCommand.Cancel ? BookingEventTypes.Cancelled : BookingEventTypes.StatusChanged,
                     new { from = locked.Status, to, reason, plannedEndsAt = before.EndsAt }, userId), cancellationToken);
@@ -345,7 +393,7 @@ public sealed partial class BookingService(
                     await outbox.WriteNotificationAsync(tenantId, NotificationTypes.BookingCancellation, after.VenueId, id, now, cancellationToken);
                 }
 
-                return ToDto(after);
+                return after;
             }, cancellationToken),
             ConcurrencyConflict);
     }
@@ -384,7 +432,8 @@ public sealed partial class BookingService(
         return hold;
     }
 
-    private async Task<Guid?> ResolveCustomerAsync(Guid tenantId, BookingCustomerInput? input, CancellationToken cancellationToken)
+    /// <summary>An existing customer with the same email is reused unchanged; <paramref name="marketingConsent"/> only applies to new customers.</summary>
+    private async Task<Guid?> ResolveCustomerAsync(Guid tenantId, BookingCustomerInput? input, bool marketingConsent, CancellationToken cancellationToken)
     {
         if (input is null)
         {
@@ -405,7 +454,7 @@ public sealed partial class BookingService(
 
         var phone = Clean(input.Phone);
         return await customers.CreateAsync(tenantId,
-            new NewCustomer(input.FirstName!.Trim(), Clean(input.LastName), email, phone, NormalizePhone(phone)), cancellationToken);
+            new NewCustomer(input.FirstName!.Trim(), Clean(input.LastName), email, phone, NormalizePhone(phone), marketingConsent), cancellationToken);
     }
 
     private async Task<VenueDto> LoadActiveVenueAsync(Guid tenantId, Guid venueId, CancellationToken cancellationToken)

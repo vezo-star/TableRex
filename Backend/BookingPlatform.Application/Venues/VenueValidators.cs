@@ -53,6 +53,7 @@ public sealed class VenueBookingRulesValidator : AbstractValidator<VenueBookingR
         RuleFor(r => r.MinLeadTimeMinutes).InclusiveBetween(0, 43200);
         RuleFor(r => r.MaxAdvanceDays).InclusiveBetween(1, 730);
         RuleFor(r => r.HoldTtlSeconds).InclusiveBetween(60, 3600);
+        RuleFor(r => r.PublicCancellationCutoffMinutes).InclusiveBetween(0, 10080);
     }
 }
 

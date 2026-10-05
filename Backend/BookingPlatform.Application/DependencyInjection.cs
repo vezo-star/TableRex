@@ -4,6 +4,7 @@ using BookingPlatform.Application.Bookings;
 using BookingPlatform.Application.Common.Idempotency;
 using BookingPlatform.Application.Customers;
 using BookingPlatform.Application.Identity;
+using BookingPlatform.Application.PublicBooking;
 using BookingPlatform.Application.Tenancy;
 using BookingPlatform.Application.Venues;
 using FluentValidation;
@@ -34,6 +35,7 @@ public static class DependencyInjection
         services.AddScoped<BoardService>();
         services.AddScoped<CustomerService>();
         services.AddScoped<AuditLogService>();
+        services.AddScoped<PublicBookingService>();
 
         return services;
     }

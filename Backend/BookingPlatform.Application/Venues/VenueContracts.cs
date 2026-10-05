@@ -13,7 +13,9 @@ public sealed record VenueBookingRules(
     int MinLeadTimeMinutes,
     int MaxAdvanceDays,
     int HoldTtlSeconds,
-    bool AutoConfirmPublicBookings)
+    bool AutoConfirmPublicBookings,
+    bool PublicBookingEnabled = true,
+    int PublicCancellationCutoffMinutes = 120)
 {
     public static VenueBookingRules Default { get; } = new(15, 120, 30, 480, 0, 1, 12, 60, 90, 300, true);
 }

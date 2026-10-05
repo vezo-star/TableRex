@@ -28,7 +28,7 @@ set_secret() {
   echo "Set user secret $secret_name"
 }
 
-for key in ConnectionStrings__Postgres ConnectionStrings__Redis Jwt__SigningKey DEV_ADMIN_PASSWORD; do
+for key in ConnectionStrings__Postgres ConnectionStrings__Redis Jwt__SigningKey PublicBooking__TokenKey DEV_ADMIN_PASSWORD; do
   set_secret "$key" yes
 done
 set_secret DEV_ADMIN_EMAIL no

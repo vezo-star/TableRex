@@ -53,6 +53,7 @@ builder.Services.AddPlatformSwagger();
 builder.Services.AddPlatformForwardedHeaders(builder.Configuration);
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddTokenIssuing(builder.Configuration);
+builder.Services.AddPublicBookingTokens(builder.Configuration);
 builder.Services.AddApplication();
 builder.Services.AddSingleton<IResponseSerializer, ApiResponseSerializer>();
 builder.Services.AddPlatformAuthentication(builder.Configuration);

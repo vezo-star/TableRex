@@ -18,6 +18,8 @@ using BookingPlatform.Infrastructure.HealthChecks;
 using BookingPlatform.Infrastructure.Identity;
 using BookingPlatform.Infrastructure.Outbox;
 using BookingPlatform.Infrastructure.Persistence;
+using BookingPlatform.Application.PublicBooking;
+using BookingPlatform.Infrastructure.PublicBooking;
 using BookingPlatform.Infrastructure.RateLimiting;
 using BookingPlatform.Infrastructure.Security;
 using BookingPlatform.Infrastructure.Tenancy;
@@ -105,7 +107,20 @@ public static class DependencyInjection
         services.AddSingleton<OutboxStore>();
         services.AddScoped<ICustomerRepository, CustomerRepository>();
         services.AddScoped<IAuditLogRepository, AuditLogRepository>();
+        services.AddScoped<IPublicDirectory, PublicDirectory>();
 
+        return services;
+    }
+
+    /// <summary>Guest manage-booking tokens (Api; the Worker needs them for notification links). Fails fast on a missing or weak key.</summary>
+    public static IServiceCollection AddPublicBookingTokens(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddOptions<PublicBookingOptions>()
+            .Bind(configuration.GetSection(PublicBookingOptions.SectionName))
+            .Validate(PublicBookingOptions.IsValid,
+                $"PublicBooking:TokenKey must be at least {PublicBookingOptions.MinimumKeyBytes} bytes and not a placeholder, and PublicBooking:MaxActiveBookingsPerContact must be 1-100.")
+            .ValidateOnStart();
+        services.AddSingleton<IPublicBookingTokens, PublicBookingTokens>();
         return services;
     }
 

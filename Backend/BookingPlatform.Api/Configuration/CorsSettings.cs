@@ -29,6 +29,6 @@ public sealed class ConfigureCorsPolicy(IOptions<CorsSettings> settings) : IConf
             .AllowAnyHeader()
             .AllowAnyMethod()
             .AllowCredentials()
-            .WithExposedHeaders(Middleware.CorrelationIdMiddleware.HeaderName));
+            .WithExposedHeaders(Middleware.CorrelationIdMiddleware.HeaderName, Controllers.IdempotencyExtensions.ReplayedHeader, "Retry-After"));
     }
 }

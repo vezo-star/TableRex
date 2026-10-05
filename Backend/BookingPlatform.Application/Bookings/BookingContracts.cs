@@ -183,6 +183,31 @@ public sealed record BookingRecord(
     BookingCustomerDto? Customer,
     IReadOnlyList<BookingResourceDto> Resources);
 
+/// <summary>Who creates a booking and under which rules; staff and public creation share <c>BookingService.CreateCoreAsync</c>.</summary>
+internal sealed record BookingCreation(
+    Guid TenantId,
+    Venues.VenueDto Venue,
+    BookingTiming Timing,
+    CreateBookingRequest Request,
+    string Source,
+    string Status,
+    string HistorySource,
+    Guid? UserId,
+    string IdempotencyScope)
+{
+    public Guid BookingId { get; init; } = Guid.CreateVersion7();
+
+    public byte[]? PublicTokenHash { get; init; }
+
+    /// <summary>Restricts AUTO allocation to resources and combinations that are bookable online.</summary>
+    public bool OnlineOnly { get; init; }
+
+    public bool MarketingConsent { get; init; }
+
+    /// <summary>Rejects the booking when the customer already has this many upcoming active bookings at the venue.</summary>
+    public int? MaxActiveBookingsPerCustomer { get; init; }
+}
+
 public sealed record NewBooking(
     Guid Id,
     Guid VenueId,
@@ -197,7 +222,11 @@ public sealed record NewBooking(
     string? SpecialRequests,
     string? InternalNotes,
     Guid? CreatedByUserId,
-    DateTime Now);
+    DateTime Now)
+{
+    /// <summary>SHA-256 of the guest's manage-booking token (public bookings only).</summary>
+    public byte[]? PublicTokenHash { get; init; }
+}
 
 public sealed record StatusHistoryEntry(Guid TenantId, Guid VenueId, Guid BookingId, string? FromStatus, string ToStatus, string Source, string? Reason, Guid? UserId);
 
@@ -246,6 +275,12 @@ public interface IBookingRepository
     Task WriteEventAsync(BookingEventEntry entry, CancellationToken cancellationToken);
 
     Task<BookingHistoryDto> GetHistoryAsync(Guid tenantId, Guid bookingId, CancellationToken cancellationToken);
+
+    /// <summary>PENDING/HELD/CONFIRMED bookings of the customer at the venue that start after <paramref name="now"/>.</summary>
+    Task<int> CountActiveUpcomingAsync(Guid tenantId, Guid venueId, Guid customerId, DateTime now, CancellationToken cancellationToken);
+
+    /// <summary>The booking a guest token belongs to. The token is the credential, so this lookup is not tenant-scoped.</summary>
+    Task<(Guid TenantId, Guid BookingId)?> FindByPublicTokenAsync(byte[] tokenHash, CancellationToken cancellationToken);
 }
 
 /// <summary>An active claim to insert. <c>EndsAt</c> already includes turnover for bookings and holds.</summary>
@@ -345,7 +380,7 @@ public interface IBlockRepository
     Task<bool> CancelAsync(Guid tenantId, Guid blockId, Guid? userId, DateTime now, CancellationToken cancellationToken);
 }
 
-public sealed record NewCustomer(string FirstName, string? LastName, string? Email, string? Phone, string? PhoneNormalized);
+public sealed record NewCustomer(string FirstName, string? LastName, string? Email, string? Phone, string? PhoneNormalized, bool MarketingConsent = false);
 
 public interface IBookingCustomerRepository
 {

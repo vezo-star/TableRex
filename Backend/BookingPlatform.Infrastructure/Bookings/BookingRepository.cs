@@ -26,9 +26,9 @@ public sealed class BookingRepository(DbSession db) : IBookingRepository
         db.ExecuteAsync(
             """
             INSERT INTO bookings (id, tenant_id, venue_id, customer_id, reference, status, source, party_size, starts_at, ends_at, business_date,
-                                  special_requests, internal_notes, created_by_user_id, confirmed_at, seated_at, created_at, updated_at)
+                                  special_requests, internal_notes, created_by_user_id, public_token_hash, confirmed_at, seated_at, created_at, updated_at)
             VALUES (@Id, @tenantId, @VenueId, @CustomerId, @Reference, @Status, @Source, @PartySize, @StartsAt, @EndsAt, @BusinessDate,
-                    @SpecialRequests, @InternalNotes, @CreatedByUserId,
+                    @SpecialRequests, @InternalNotes, @CreatedByUserId, @PublicTokenHash,
                     CASE WHEN @Status = 'CONFIRMED' THEN @Now END, CASE WHEN @Status = 'SEATED' THEN @Now END, @Now, @Now)
             """,
             new
@@ -47,9 +47,28 @@ public sealed class BookingRepository(DbSession db) : IBookingRepository
                 booking.SpecialRequests,
                 booking.InternalNotes,
                 booking.CreatedByUserId,
+                booking.PublicTokenHash,
                 booking.Now,
             },
             cancellationToken);
+
+    public Task<int> CountActiveUpcomingAsync(Guid tenantId, Guid venueId, Guid customerId, DateTime now, CancellationToken cancellationToken) =>
+        db.QuerySingleAsync<int>(
+            """
+            SELECT count(*)::int FROM bookings
+            WHERE tenant_id = @tenantId AND venue_id = @venueId AND customer_id = @customerId
+              AND status IN ('PENDING', 'HELD', 'CONFIRMED') AND starts_at > @now
+            """,
+            new { tenantId, venueId, customerId, now },
+            cancellationToken);
+
+    public async Task<(Guid TenantId, Guid BookingId)?> FindByPublicTokenAsync(byte[] tokenHash, CancellationToken cancellationToken)
+    {
+        var row = await db.QuerySingleOrDefaultAsync<TokenRow>(
+            "SELECT tenant_id, id FROM bookings WHERE public_token_hash = @tokenHash",
+            new { tokenHash }, cancellationToken);
+        return row is null ? null : (row.TenantId, row.Id);
+    }
 
     public async Task<BookingRecord?> GetAsync(Guid tenantId, Guid bookingId, CancellationToken cancellationToken)
     {
@@ -297,6 +316,12 @@ public sealed class BookingRepository(DbSession db) : IBookingRepository
         public int Version { get; init; }
     }
 
+    private sealed class TokenRow
+    {
+        public Guid TenantId { get; init; }
+        public Guid Id { get; init; }
+    }
+
     private sealed class ResourceRow
     {
         public Guid BookingId { get; init; }
@@ -337,10 +362,10 @@ public sealed class BookingCustomerRepository(DbSession db) : IBookingCustomerRe
     public Task<Guid> CreateAsync(Guid tenantId, NewCustomer customer, CancellationToken cancellationToken) =>
         db.QuerySingleAsync<Guid>(
             """
-            INSERT INTO customers (tenant_id, first_name, last_name, email, phone, phone_normalized)
-            VALUES (@tenantId, @FirstName, @LastName, @Email, @Phone, @PhoneNormalized) RETURNING id
+            INSERT INTO customers (tenant_id, first_name, last_name, email, phone, phone_normalized, marketing_consent)
+            VALUES (@tenantId, @FirstName, @LastName, @Email, @Phone, @PhoneNormalized, @MarketingConsent) RETURNING id
             """,
-            new { tenantId, customer.FirstName, customer.LastName, customer.Email, customer.Phone, customer.PhoneNormalized },
+            new { tenantId, customer.FirstName, customer.LastName, customer.Email, customer.Phone, customer.PhoneNormalized, customer.MarketingConsent },
             cancellationToken);
 }
 

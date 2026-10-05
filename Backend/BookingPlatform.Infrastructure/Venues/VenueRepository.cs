@@ -9,7 +9,8 @@ public sealed class VenueRepository(DbSession db) : IVenueRepository
         id, name, slug, time_zone, status, description, address_line1, address_line2, city, region, postal_code,
         country_code, phone, email, slot_interval_minutes, default_duration_minutes, min_duration_minutes,
         max_duration_minutes, turnover_buffer_minutes, min_party_size, max_party_size, min_lead_time_minutes,
-        max_advance_days, hold_ttl_seconds, auto_confirm_public_bookings, created_at, updated_at
+        max_advance_days, hold_ttl_seconds, auto_confirm_public_bookings, public_booking_enabled,
+        public_cancellation_cutoff_minutes, created_at, updated_at
         """;
 
     private const string SectionColumns = "id, venue_id, name, description, sort_order, is_active";
@@ -60,11 +61,12 @@ public sealed class VenueRepository(DbSession db) : IVenueRepository
                                 postal_code, country_code, phone, email, slot_interval_minutes, default_duration_minutes,
                                 min_duration_minutes, max_duration_minutes, turnover_buffer_minutes, min_party_size,
                                 max_party_size, min_lead_time_minutes, max_advance_days, hold_ttl_seconds,
-                                auto_confirm_public_bookings)
+                                auto_confirm_public_bookings, public_booking_enabled, public_cancellation_cutoff_minutes)
             VALUES (@tenantId, @Name, @Slug, @TimeZone, @Description, @AddressLine1, @AddressLine2, @City, @Region,
                     @PostalCode, @CountryCode, @Phone, @Email, @SlotIntervalMinutes, @DefaultDurationMinutes,
                     @MinDurationMinutes, @MaxDurationMinutes, @TurnoverBufferMinutes, @MinPartySize, @MaxPartySize,
-                    @MinLeadTimeMinutes, @MaxAdvanceDays, @HoldTtlSeconds, @AutoConfirmPublicBookings)
+                    @MinLeadTimeMinutes, @MaxAdvanceDays, @HoldTtlSeconds, @AutoConfirmPublicBookings,
+                    @PublicBookingEnabled, @PublicCancellationCutoffMinutes)
             RETURNING id
             """,
             new
@@ -74,7 +76,7 @@ public sealed class VenueRepository(DbSession db) : IVenueRepository
                 request.Phone, request.Email, rules.SlotIntervalMinutes, rules.DefaultDurationMinutes,
                 rules.MinDurationMinutes, rules.MaxDurationMinutes, rules.TurnoverBufferMinutes, rules.MinPartySize,
                 rules.MaxPartySize, rules.MinLeadTimeMinutes, rules.MaxAdvanceDays, rules.HoldTtlSeconds,
-                rules.AutoConfirmPublicBookings,
+                rules.AutoConfirmPublicBookings, rules.PublicBookingEnabled, rules.PublicCancellationCutoffMinutes,
             },
             cancellationToken);
 
@@ -92,7 +94,8 @@ public sealed class VenueRepository(DbSession db) : IVenueRepository
                 turnover_buffer_minutes = @TurnoverBufferMinutes, min_party_size = @MinPartySize,
                 max_party_size = @MaxPartySize, min_lead_time_minutes = @MinLeadTimeMinutes,
                 max_advance_days = @MaxAdvanceDays, hold_ttl_seconds = @HoldTtlSeconds,
-                auto_confirm_public_bookings = @AutoConfirmPublicBookings, updated_at = now()
+                auto_confirm_public_bookings = @AutoConfirmPublicBookings, public_booking_enabled = @PublicBookingEnabled,
+                public_cancellation_cutoff_minutes = @PublicCancellationCutoffMinutes, updated_at = now()
             WHERE tenant_id = @tenantId AND id = @venueId
             """,
             new
@@ -102,7 +105,8 @@ public sealed class VenueRepository(DbSession db) : IVenueRepository
                 request.CountryCode, request.Phone, request.Email, rules.SlotIntervalMinutes,
                 rules.DefaultDurationMinutes, rules.MinDurationMinutes, rules.MaxDurationMinutes,
                 rules.TurnoverBufferMinutes, rules.MinPartySize, rules.MaxPartySize, rules.MinLeadTimeMinutes,
-                rules.MaxAdvanceDays, rules.HoldTtlSeconds, rules.AutoConfirmPublicBookings,
+                rules.MaxAdvanceDays, rules.HoldTtlSeconds, rules.AutoConfirmPublicBookings, rules.PublicBookingEnabled,
+                rules.PublicCancellationCutoffMinutes,
             },
             cancellationToken);
     }
@@ -262,7 +266,7 @@ public sealed class VenueRepository(DbSession db) : IVenueRepository
         r.PostalCode, r.CountryCode, r.Phone, r.Email,
         new VenueBookingRules(r.SlotIntervalMinutes, r.DefaultDurationMinutes, r.MinDurationMinutes, r.MaxDurationMinutes,
             r.TurnoverBufferMinutes, r.MinPartySize, r.MaxPartySize, r.MinLeadTimeMinutes, r.MaxAdvanceDays,
-            r.HoldTtlSeconds, r.AutoConfirmPublicBookings),
+            r.HoldTtlSeconds, r.AutoConfirmPublicBookings, r.PublicBookingEnabled, r.PublicCancellationCutoffMinutes),
         r.CreatedAt, r.UpdatedAt);
 
     private sealed class VenueRow
@@ -292,6 +296,8 @@ public sealed class VenueRepository(DbSession db) : IVenueRepository
         public int MaxAdvanceDays { get; init; }
         public int HoldTtlSeconds { get; init; }
         public bool AutoConfirmPublicBookings { get; init; }
+        public bool PublicBookingEnabled { get; init; }
+        public int PublicCancellationCutoffMinutes { get; init; }
         public DateTime CreatedAt { get; init; }
         public DateTime UpdatedAt { get; init; }
     }
