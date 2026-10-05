@@ -61,6 +61,24 @@
           </q-chip>
         </q-td>
       </template>
+      <template #body-cell-venues="props">
+        <q-td :props="props">
+          <span v-if="hasAllAccess(props.row)" class="text-grey-7">All venues</span>
+          <template v-else>
+            <q-chip
+              v-for="venueId in props.row.venueIds"
+              :key="venueId"
+              dense
+              square
+              color="green-1"
+              text-color="green-9"
+            >
+              {{ venueName(venueId) }}
+            </q-chip>
+            <span v-if="!props.row.venueIds?.length" class="text-negative text-caption">None</span>
+          </template>
+        </q-td>
+      </template>
       <template #body-cell-status="props">
         <q-td :props="props">
           <q-badge :color="props.row.status === 'ACTIVE' ? 'positive' : 'grey'">{{
@@ -79,6 +97,17 @@
               @click="openRoles(props.row)"
             >
               <q-tooltip>Edit roles</q-tooltip>
+            </q-btn>
+            <q-btn
+              v-if="!hasAllAccess(props.row)"
+              flat
+              dense
+              icon="storefront"
+              aria-label="Assign venues"
+              data-test="assign-venues"
+              @click="openVenues(props.row)"
+            >
+              <q-tooltip>Assign venues</q-tooltip>
             </q-btn>
             <q-btn
               v-if="props.row.status === 'ACTIVE'"
@@ -206,6 +235,39 @@
         </q-card-actions>
       </q-card>
     </q-dialog>
+
+    <q-dialog v-model="venuesOpen" persistent>
+      <q-card style="min-width: 340px">
+        <q-card-section class="text-h6">Venues for {{ editing?.displayName }}</q-card-section>
+        <q-card-section>
+          <q-banner
+            v-if="venuesAction.error.value"
+            dense
+            rounded
+            class="bg-red-1 text-negative q-mb-sm"
+          >
+            {{ venuesAction.error.value.message }}
+          </q-banner>
+          <q-option-group
+            v-if="venueOptions.length"
+            v-model="editVenues"
+            :options="venueOptions"
+            type="checkbox"
+          />
+          <div v-else class="text-grey-7">No venues exist yet.</div>
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn v-close-popup flat label="Cancel" />
+          <q-btn
+            color="primary"
+            unelevated
+            label="Save"
+            :loading="venuesAction.loading.value"
+            @click="submitVenues"
+          />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
   </q-page>
 </template>
 
@@ -215,6 +277,8 @@ import { useQuasar } from 'quasar'
 import ErrorState from '@/components/common/ErrorState.vue'
 import { tenancyService } from '@/services/tenancyService.js'
 import { useAuthStore } from '@/stores/auth.js'
+import { useVenuesStore } from '@/stores/venues.js'
+import { venueService } from '@/services/venueService.js'
 import { useApiAction } from '@/composables/useApiAction.js'
 import { Permissions, RoleLabels, Roles } from '@/constants/permissions.js'
 import { normaliseError } from '@/utils/problemDetails.js'
@@ -222,6 +286,7 @@ import { normaliseError } from '@/utils/problemDetails.js'
 defineOptions({ name: 'StaffPage' })
 
 const auth = useAuthStore()
+const venues = useVenuesStore()
 const $q = useQuasar()
 const canManage = computed(() => auth.hasPermission(Permissions.STAFF_MANAGE))
 const isOwner = computed(() => auth.roles.includes(Roles.TENANT_OWNER))
@@ -230,6 +295,7 @@ const columns = [
   { name: 'displayName', label: 'Name', field: 'displayName', align: 'left' },
   { name: 'email', label: 'Email', field: 'email', align: 'left' },
   { name: 'roles', label: 'Roles', field: 'roles', align: 'left' },
+  { name: 'venues', label: 'Venues', field: 'venueIds', align: 'left' },
   { name: 'status', label: 'Status', field: 'status', align: 'left' },
   { name: 'actions', label: '', field: 'tenantUserId', align: 'right' },
 ]
@@ -316,6 +382,33 @@ function openRoles(row) {
 async function submitRoles() {
   if (await rolesAction.run(editing.value.tenantUserId, editRoles.value)) {
     rolesOpen.value = false
+    if (editing.value.userId === auth.userId) {
+      await auth.loadMe()
+    }
+    load()
+  }
+}
+
+// Owners and admins see every venue (D-018); others need explicit assignments.
+const hasAllAccess = (row) =>
+  row.roles.includes(Roles.TENANT_OWNER) || row.roles.includes(Roles.TENANT_ADMIN)
+const venueName = (id) => venues.venues.find((v) => v.id === id)?.name ?? 'Unknown venue'
+const venueOptions = computed(() => venues.venues.map((v) => ({ label: v.name, value: v.id })))
+
+const venuesOpen = ref(false)
+const editVenues = ref([])
+const venuesAction = useApiAction((id, venueIds) => venueService.updateStaffVenues(id, venueIds))
+
+function openVenues(row) {
+  editing.value = row
+  editVenues.value = [...(row.venueIds ?? [])]
+  venuesAction.reset()
+  venuesOpen.value = true
+}
+
+async function submitVenues() {
+  if (await venuesAction.run(editing.value.tenantUserId, editVenues.value)) {
+    venuesOpen.value = false
     if (editing.value.userId === auth.userId) {
       await auth.loadMe()
     }

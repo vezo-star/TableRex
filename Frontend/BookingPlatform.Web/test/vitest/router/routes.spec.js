@@ -40,6 +40,19 @@ describe('routes', () => {
     expect(router.resolve('/settings').meta.permission).toBe(Permissions.SETTINGS_MANAGE)
   })
 
+  it.each([
+    ['/venues', RouteNames.VENUES, Permissions.VENUE_VIEW],
+    ['/venues/abc', RouteNames.VENUE_SETTINGS, Permissions.VENUE_VIEW],
+    ['/resources', RouteNames.RESOURCES, Permissions.RESOURCE_VIEW],
+    ['/floor-plans', RouteNames.FLOOR_PLANS, Permissions.FLOORPLAN_VIEW],
+  ])('protects %s with a view permission', (path, name, permission) => {
+    const route = createAppRouter().resolve(path)
+
+    expect(route.name).toBe(name)
+    expect(route.meta.permission).toBe(permission)
+    expect(route.meta.requiresTenant).toBe(true)
+  })
+
   it.each(['/does-not-exist', '/deeply/nested/unknown'])(
     'resolves %s to not-found',
     async (path) => {

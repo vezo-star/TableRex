@@ -15,6 +15,7 @@
         <q-toolbar-title>Booking Platform</q-toolbar-title>
 
         <template v-if="auth.isAuthenticated">
+          <VenueSwitcher v-if="auth.hasTenant" />
           <q-btn-dropdown
             v-if="auth.memberships.length > 1"
             flat
@@ -94,6 +95,7 @@
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useQuasar } from 'quasar'
+import VenueSwitcher from '@/components/venues/VenueSwitcher.vue'
 import { dashboardNavigation, RouteNames, visibleNavigation } from '@/constants/navigation.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { normaliseError } from '@/utils/problemDetails.js'

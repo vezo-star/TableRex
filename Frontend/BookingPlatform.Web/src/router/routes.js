@@ -19,6 +19,31 @@ const routes = [
         meta: { permission: Permissions.STAFF_VIEW },
       },
       {
+        path: 'venues',
+        name: RouteNames.VENUES,
+        component: () => import('@/pages/venues/VenuesPage.vue'),
+        meta: { permission: Permissions.VENUE_VIEW },
+      },
+      {
+        path: 'venues/:venueId',
+        name: RouteNames.VENUE_SETTINGS,
+        component: () => import('@/pages/venues/VenueSettingsPage.vue'),
+        meta: { permission: Permissions.VENUE_VIEW },
+        props: true,
+      },
+      {
+        path: 'resources',
+        name: RouteNames.RESOURCES,
+        component: () => import('@/pages/resources/ResourcesPage.vue'),
+        meta: { permission: Permissions.RESOURCE_VIEW },
+      },
+      {
+        path: 'floor-plans',
+        name: RouteNames.FLOOR_PLANS,
+        component: () => import('@/pages/floorplans/FloorPlanPage.vue'),
+        meta: { permission: Permissions.FLOORPLAN_VIEW },
+      },
+      {
         path: 'settings',
         name: RouteNames.SETTINGS,
         component: () => import('@/pages/settings/TenantSettingsPage.vue'),
