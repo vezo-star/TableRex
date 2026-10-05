@@ -131,6 +131,19 @@ const routes = [
         meta: { guestOnly: true },
       },
       {
+        path: 'forgot-password',
+        name: RouteNames.FORGOT_PASSWORD,
+        component: () => import('@/pages/auth/ForgotPasswordPage.vue'),
+        meta: { guestOnly: true },
+      },
+      {
+        // Public, not guest-only: a signed-in user opening an emailed link must not lose the token.
+        path: 'reset-password',
+        name: RouteNames.RESET_PASSWORD,
+        component: () => import('@/pages/auth/ResetPasswordPage.vue'),
+        meta: { public: true },
+      },
+      {
         path: 'select-tenant',
         name: RouteNames.SELECT_TENANT,
         component: () => import('@/pages/auth/SelectTenantPage.vue'),

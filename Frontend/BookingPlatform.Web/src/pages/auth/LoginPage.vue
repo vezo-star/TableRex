@@ -53,6 +53,11 @@
       :loading="loading"
       data-test="login-submit"
     />
+    <div class="text-center">
+      <router-link :to="{ name: RouteNames.FORGOT_PASSWORD }" data-test="forgot-password-link">
+        Forgot password?
+      </router-link>
+    </div>
   </q-form>
 </template>
 

@@ -3,6 +3,8 @@ import { Permissions } from '@/constants/permissions.js'
 export const RouteNames = Object.freeze({
   LOGIN: 'login',
   SELECT_TENANT: 'select-tenant',
+  FORGOT_PASSWORD: 'forgot-password',
+  RESET_PASSWORD: 'reset-password',
   NO_ACCESS: 'no-access',
   FORBIDDEN: 'forbidden',
   DASHBOARD: 'dashboard',

@@ -14,6 +14,7 @@ const { default: LoginPage } = await import('@/pages/auth/LoginPage.vue')
 function router() {
   return createTestRouter([
     { path: '/login', name: 'login', component: BlankComponent },
+    { path: '/forgot-password', name: 'forgot-password', component: BlankComponent },
     { path: '/', name: 'dashboard', component: BlankComponent },
     { path: '/staff', name: 'staff', component: BlankComponent },
     { path: '/select-tenant', name: 'select-tenant', component: BlankComponent },

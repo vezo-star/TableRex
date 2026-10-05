@@ -36,4 +36,17 @@ export const authService = {
     const { data } = await http.post('/v1/auth/change-password', { currentPassword, newPassword })
     return data
   },
+
+  /** Always resolves for a well-formed address: the server never reveals whether an account exists. */
+  async forgotPassword(email) {
+    await http.post('/v1/auth/password/forgot', { email }, { ...noRefresh, skipAuth: true })
+  },
+
+  async resetPassword(token, newPassword) {
+    await http.post(
+      '/v1/auth/password/reset',
+      { token, newPassword },
+      { ...noRefresh, skipAuth: true },
+    )
+  },
 }
