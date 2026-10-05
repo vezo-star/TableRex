@@ -66,6 +66,14 @@
             </q-item-section>
           </q-item>
         </q-list>
+        <template v-if="booking.payment">
+          <q-separator />
+          <DepositPayCard
+            :payment="booking.payment"
+            :manage-token="token"
+            :time-zone="booking.timeZone"
+          />
+        </template>
         <q-separator />
 
         <q-card-section v-if="booking.status === 'CANCELLED'" data-test="cancelled-note">
@@ -136,6 +144,7 @@ import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useQuasar } from 'quasar'
 import ErrorState from '@/components/common/ErrorState.vue'
+import DepositPayCard from '@/components/payments/DepositPayCard.vue'
 import { publicBookingService, tokenFromHash } from '@/services/publicBookingService.js'
 import { RouteNames } from '@/constants/navigation.js'
 import { normaliseError } from '@/utils/problemDetails.js'
@@ -163,6 +172,7 @@ const statusColor = computed(() => {
     case 'CONFIRMED':
       return 'positive'
     case 'PENDING':
+    case 'HELD':
       return 'warning'
     case 'CANCELLED':
     case 'NO_SHOW':

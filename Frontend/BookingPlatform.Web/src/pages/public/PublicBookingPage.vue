@@ -32,13 +32,14 @@
               :color="confirmation.status === 'CONFIRMED' ? 'positive' : 'warning'"
               size="56px"
             />
-            <div class="text-h6 q-mt-sm">
-              {{
-                confirmation.status === 'CONFIRMED' ? 'Your booking is confirmed' : 'Request received'
-              }}
+            <div class="text-h6 q-mt-sm" data-test="confirmation-title">
+              {{ confirmationTitle }}
             </div>
-            <div v-if="confirmation.status !== 'CONFIRMED'" class="text-body2 text-grey-8">
+            <div v-if="confirmation.status === 'PENDING'" class="text-body2 text-grey-8">
               The venue will confirm your booking shortly.
+            </div>
+            <div v-else-if="confirmation.status === 'HELD'" class="text-body2 text-grey-8">
+              Pay the deposit below to confirm it.
             </div>
           </q-card-section>
           <q-separator />
@@ -64,6 +65,14 @@
               <q-item-section side class="text-dark">{{ confirmation.partySize }}</q-item-section>
             </q-item>
           </q-list>
+          <template v-if="confirmation.payment && confirmation.manageToken">
+            <q-separator />
+            <DepositPayCard
+              :payment="confirmation.payment"
+              :manage-token="confirmation.manageToken"
+              :time-zone="confirmation.timeZone"
+            />
+          </template>
           <q-separator />
           <q-card-section v-if="manageUrl">
             <div class="text-subtitle2">Manage your booking</div>
@@ -280,6 +289,10 @@
                   dense
                   label="Send me news and offers from this venue"
                 />
+                <div v-if="venue.deposit" class="text-body2 text-weight-medium" data-test="deposit-notice">
+                  {{ depositNotice(venue.deposit, partySize) }}
+                  You will have {{ formatMinutes(venue.deposit.paymentWindowMinutes) }} to pay.
+                </div>
                 <div class="text-caption text-grey-7">
                   <template v-if="venue.cancellationCutoffMinutes > 0">
                     You can cancel online up to
@@ -294,7 +307,7 @@
                   no-caps
                   class="full-width"
                   size="lg"
-                  :label="venue.autoConfirm ? 'Confirm booking' : 'Request booking'"
+                  :label="submitLabel"
                   :loading="submitting"
                   data-test="submit-booking"
                 />
@@ -311,7 +324,9 @@
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useQuasar, copyToClipboard } from 'quasar'
 import ErrorState from '@/components/common/ErrorState.vue'
+import DepositPayCard from '@/components/payments/DepositPayCard.vue'
 import { publicBookingService, manageBookingUrl } from '@/services/publicBookingService.js'
+import { depositNotice } from '@/utils/payments.js'
 import { createIdempotencyKeeper, isRetryableFailure } from '@/services/idempotency.js'
 import { normaliseError } from '@/utils/problemDetails.js'
 import {
@@ -360,6 +375,24 @@ const addressLine = computed(() =>
 const manageUrl = computed(() =>
   confirmation.value?.manageToken ? manageBookingUrl(confirmation.value.manageToken) : null,
 )
+
+const confirmationTitle = computed(() => {
+  switch (confirmation.value?.status) {
+    case 'CONFIRMED':
+      return 'Your booking is confirmed'
+    case 'HELD':
+      return 'Your table is held'
+    default:
+      return 'Request received'
+  }
+})
+
+const submitLabel = computed(() => {
+  if (venue.value?.deposit) {
+    return 'Continue to deposit'
+  }
+  return venue.value?.autoConfirm ? 'Confirm booking' : 'Request booking'
+})
 
 function blankGuest() {
   return {

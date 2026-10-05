@@ -110,7 +110,7 @@ export function formatMinutes(total) {
 
 export const BookingStatusText = Object.freeze({
   PENDING: 'Requested — the venue will confirm',
-  HELD: 'Held',
+  HELD: 'Held — pay the deposit to confirm',
   CONFIRMED: 'Confirmed',
   CHECKED_IN: 'Checked in',
   SEATED: 'Seated',

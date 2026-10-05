@@ -53,6 +53,20 @@ export const publicBookingService = {
     })
     return data
   },
+
+  /** Starts the deposit checkout; returns `{ redirectUrl }` at the payment provider. */
+  async startPayment(token) {
+    const { data } = await http.post('/v1/public/booking/payment', null, {
+      ...ANONYMOUS,
+      headers: tokenHeaders(token),
+    })
+    return data
+  },
+
+  /** Development only: completes a Simulated provider checkout (the API rejects it in Production). */
+  async completeSimulatedCheckout({ paymentId, token, outcome }) {
+    await http.post('/v1/payments/simulated/complete', { paymentId, token, outcome }, ANONYMOUS)
+  },
 }
 
 /**

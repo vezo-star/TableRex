@@ -24,6 +24,8 @@ export const RouteNames = Object.freeze({
   SYSTEM_STATUS: 'system-status',
   PUBLIC_BOOKING: 'public-booking',
   PUBLIC_MANAGE_BOOKING: 'public-manage-booking',
+  PAYMENT_RETURN: 'payment-return',
+  SIMULATED_CHECKOUT: 'simulated-checkout',
   NOT_FOUND: 'not-found',
 })
 

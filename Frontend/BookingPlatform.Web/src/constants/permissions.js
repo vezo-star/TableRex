@@ -1,4 +1,4 @@
-// Mirrors BookingPlatform.Application.Common.Security.Permissions / Roles (seeded by V027).
+// Mirrors BookingPlatform.Application.Common.Security.Permissions / Roles (seeded by V027, payments by V030).
 export const Permissions = Object.freeze({
   BOOKING_VIEW: 'booking.view',
   BOOKING_CREATE: 'booking.create',
@@ -21,6 +21,8 @@ export const Permissions = Object.freeze({
   STAFF_MANAGE: 'staff.manage',
   REPORTS_VIEW: 'reports.view',
   SETTINGS_MANAGE: 'settings.manage',
+  PAYMENT_VIEW: 'payment.view',
+  PAYMENT_REFUND: 'payment.refund',
 })
 
 export const Roles = Object.freeze({

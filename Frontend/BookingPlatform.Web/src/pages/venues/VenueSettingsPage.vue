@@ -53,6 +53,7 @@
         <q-tab name="sections" label="Sections" />
         <q-tab name="hours" label="Opening hours" />
         <q-tab name="special" label="Special days" />
+        <q-tab name="deposits" label="Deposits" data-test="tab-deposits" />
       </q-tabs>
       <q-separator />
       <q-tab-panels v-model="tab" animated>
@@ -73,6 +74,9 @@
         <q-tab-panel name="special">
           <SpecialHoursPanel :venue="venue" :can-manage="canManage" />
         </q-tab-panel>
+        <q-tab-panel name="deposits">
+          <DepositSettingsPanel :venue-id="venue.id" :can-manage="canManage" />
+        </q-tab-panel>
       </q-tab-panels>
     </q-card>
   </q-page>
@@ -86,6 +90,7 @@ import VenueForm from '@/components/venues/VenueForm.vue'
 import SectionsPanel from '@/components/venues/SectionsPanel.vue'
 import OperatingHoursEditor from '@/components/venues/OperatingHoursEditor.vue'
 import SpecialHoursPanel from '@/components/venues/SpecialHoursPanel.vue'
+import DepositSettingsPanel from '@/components/payments/DepositSettingsPanel.vue'
 import { venueService } from '@/services/venueService.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useVenuesStore } from '@/stores/venues.js'

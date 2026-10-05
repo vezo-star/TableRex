@@ -46,6 +46,7 @@
         <q-tabs v-model="tab" dense align="left" class="text-grey-8" active-color="primary" no-caps>
           <q-tab name="details" label="Details" />
           <q-tab name="history" label="History" data-test="tab-history" />
+          <q-tab v-if="canViewPayments" name="payments" label="Payments" data-test="tab-payments" />
         </q-tabs>
         <q-separator />
 
@@ -294,6 +295,10 @@
                 </q-timeline-entry>
               </q-timeline>
             </q-tab-panel>
+
+            <q-tab-panel v-if="canViewPayments" name="payments" class="q-pa-md">
+              <BookingPaymentsPanel :key="paymentsKey" :booking-id="booking.id" />
+            </q-tab-panel>
           </q-tab-panels>
         </q-scroll-area>
       </template>
@@ -306,6 +311,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import { useQuasar } from 'quasar'
 import BookingStatusChip from '@/components/bookings/BookingStatusChip.vue'
 import ErrorState from '@/components/common/ErrorState.vue'
+import BookingPaymentsPanel from '@/components/payments/BookingPaymentsPanel.vue'
 import { ErrorCodes } from '@/constants/errorCodes.js'
 import { RouteNames } from '@/constants/navigation.js'
 import { useRealtimeRefresh } from '@/composables/useRealtimeRefresh.js'
@@ -358,6 +364,9 @@ const actions = computed(() => availableActions(booking.value, can))
 const editable = computed(() => canEdit(booking.value, can))
 const movable = computed(() => canMove(booking.value, can))
 const canViewCustomers = computed(() => can(Permissions.CUSTOMER_VIEW))
+const canViewPayments = computed(() => can(Permissions.PAYMENT_VIEW))
+// Bumped whenever the booking reloads so a webhook-driven status change also refreshes its payments.
+const paymentsKey = ref(0)
 const durations = computed(() => durationOptions(props.venue?.rules))
 const resourceOptions = computed(() =>
   props.resources
@@ -383,6 +392,7 @@ async function load() {
   loadError.value = null
   try {
     booking.value = await bookingService.get(props.bookingId)
+    paymentsKey.value++
   } catch (e) {
     loadError.value = normaliseError(e)
   } finally {

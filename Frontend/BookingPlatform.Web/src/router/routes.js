@@ -174,6 +174,17 @@ const routes = [
         name: RouteNames.PUBLIC_MANAGE_BOOKING,
         component: () => import('@/pages/public/ManageBookingPage.vue'),
       },
+      {
+        path: 'booking/payment-return',
+        name: RouteNames.PAYMENT_RETURN,
+        component: () => import('@/pages/public/PaymentReturnPage.vue'),
+      },
+      {
+        // The Simulated provider's "hosted checkout" (development only; the API refuses it in Production).
+        path: 'pay/simulated',
+        name: RouteNames.SIMULATED_CHECKOUT,
+        component: () => import('@/pages/public/SimulatedCheckoutPage.vue'),
+      },
     ],
   },
 

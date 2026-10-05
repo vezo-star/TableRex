@@ -15,6 +15,7 @@ vi.mock('@/services/publicBookingService.js', async (importOriginal) => {
       create: vi.fn(),
       getBooking: vi.fn(),
       cancel: vi.fn(),
+      startPayment: vi.fn(),
     },
   }
 })
@@ -205,6 +206,49 @@ describe('PublicBookingPage', () => {
     expect(wrapper.find('[data-test="booking-confirmation"]').text()).toContain('Request received')
   })
 
+  it('explains the deposit up front and offers to pay it once the table is held', async () => {
+    publicBookingService.venue.mockResolvedValue({
+      ...venue,
+      deposit: {
+        policy: 'PER_GUEST',
+        amountMinor: 5000,
+        currency: 'ZAR',
+        paymentWindowMinutes: 30,
+      },
+    })
+    publicBookingService.availability.mockResolvedValue(times('18:00'))
+    publicBookingService.create.mockResolvedValue({
+      booking: {
+        reference: 'BK-9',
+        status: 'HELD',
+        date: '2026-10-09',
+        time: '18:00',
+        partySize: 2,
+        timeZone: 'Africa/Johannesburg',
+        manageToken: 'tok_9',
+        payment: {
+          status: 'CREATED',
+          amountMinor: 10000,
+          currency: 'ZAR',
+          payBy: '2026-10-09T10:30:00Z',
+          canPay: true,
+        },
+      },
+      replayed: false,
+    })
+    const wrapper = await mountBooking()
+
+    await wrapper.find('[data-test="time-slot"]').trigger('click')
+    expect(wrapper.find('[data-test="deposit-notice"]').text()).toMatch(/per guest .* for 2 guests/)
+    expect(wrapper.find('[data-test="submit-booking"]').text()).toContain('Continue to deposit')
+    await fillGuest(wrapper)
+    await wrapper.find('form').trigger('submit')
+    await settle()
+
+    expect(wrapper.find('[data-test="confirmation-title"]').text()).toBe('Your table is held')
+    expect(wrapper.find('[data-test="pay-deposit"]').text()).toContain('100')
+  })
+
   it('explains when the venue is not taking bookings', async () => {
     publicBookingService.venue.mockRejectedValue({
       response: { status: 404, data: { code: 'VENUE_NOT_FOUND', detail: 'Venue not found.' } },
@@ -280,6 +324,24 @@ describe('ManageBookingPage', () => {
 
     expect(publicBookingService.cancel).toHaveBeenCalledWith('tok_123')
     expect(wrapper.find('[data-test="cancelled-note"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('shows the deposit on a held booking', async () => {
+    publicBookingService.getBooking.mockResolvedValue({
+      ...booking,
+      status: 'HELD',
+      payment: {
+        status: 'PENDING',
+        amountMinor: 10000,
+        currency: 'ZAR',
+        payBy: '2026-10-09T10:30:00Z',
+        canPay: true,
+      },
+    })
+    const wrapper = await mountManage('/booking/manage#tok_123')
+    expect(wrapper.find('[data-test="deposit-section"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="pay-deposit"]').exists()).toBe(true)
     wrapper.unmount()
   })
 
