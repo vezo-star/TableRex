@@ -13,6 +13,12 @@ const routes = [
         component: () => import('@/pages/DashboardPage.vue'),
       },
       {
+        path: 'availability',
+        name: RouteNames.AVAILABILITY,
+        component: () => import('@/pages/availability/AvailabilityPage.vue'),
+        meta: { permission: Permissions.BOOKING_VIEW },
+      },
+      {
         path: 'staff',
         name: RouteNames.STAFF,
         component: () => import('@/pages/staff/StaffPage.vue'),

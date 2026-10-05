@@ -6,6 +6,7 @@ export const RouteNames = Object.freeze({
   NO_ACCESS: 'no-access',
   FORBIDDEN: 'forbidden',
   DASHBOARD: 'dashboard',
+  AVAILABILITY: 'availability',
   ACCOUNT: 'account',
   STAFF: 'staff',
   VENUES: 'venues',
@@ -21,6 +22,12 @@ export const RouteNames = Object.freeze({
 /** Drawer entries; each is shown only when the user holds `permission` (or any of `anyPermission`). */
 export const dashboardNavigation = Object.freeze([
   { label: 'Dashboard', icon: 'dashboard', to: { name: RouteNames.DASHBOARD } },
+  {
+    label: 'Availability',
+    icon: 'event_available',
+    to: { name: RouteNames.AVAILABILITY },
+    permission: Permissions.BOOKING_VIEW,
+  },
   {
     label: 'Floor plans',
     icon: 'grid_view',

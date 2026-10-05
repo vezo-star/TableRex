@@ -135,6 +135,26 @@ export const venueService = {
     return data
   },
 
+  async listCombinations(venueId) {
+    const { data } = await http.get('/v1/resource-combinations', { params: { venueId } })
+    return data
+  },
+
+  async createCombination(payload) {
+    const { data } = await http.post('/v1/resource-combinations', payload)
+    return data
+  },
+
+  async updateCombination(combinationId, payload) {
+    const { data } = await http.put(`/v1/resource-combinations/${id(combinationId)}`, payload)
+    return data
+  },
+
+  async deleteCombination(combinationId) {
+    const { data } = await http.delete(`/v1/resource-combinations/${id(combinationId)}`)
+    return data
+  },
+
   async listFloorPlans(venueId) {
     const { data } = await http.get('/v1/floor-plans', { params: { venueId } })
     return data

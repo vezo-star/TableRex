@@ -96,6 +96,8 @@
       </template>
     </q-table>
 
+    <CombinationsPanel v-if="venueId && !loadError" :venue-id="venueId" :resources="rows" />
+
     <ResourceDialog
       v-model="editOpen"
       :resource="editing"
@@ -112,6 +114,7 @@
 import { computed, ref, watch } from 'vue'
 import { useQuasar } from 'quasar'
 import ErrorState from '@/components/common/ErrorState.vue'
+import CombinationsPanel from '@/components/resources/CombinationsPanel.vue'
 import NoVenueState from '@/components/venues/NoVenueState.vue'
 import ResourceDialog from '@/components/resources/ResourceDialog.vue'
 import ResourceTypesDialog from '@/components/resources/ResourceTypesDialog.vue'
