@@ -91,6 +91,8 @@ public sealed class AppRoleProvisionerTests(InfrastructureFixture fixture)
     [InlineData("app_user", "Pässwörd-mit-Umlauten-1", "16-128")]
     [InlineData("app_user", "abababababababababab", "predictable")]
     [InlineData("app_user", "CHANGE_ME_app_database_password", "placeholder")]
+    [InlineData("app_user", "Role-Test;Value-Alpha-913", "connection strings")]
+    [InlineData("app_user", "Role-Test'Value-Alpha-913", "connection strings")]
     public void Rejects_unsafe_options(string user, string password, string expected) =>
         AppRoleProvisioner.Validate(new AppRoleOptions(user, password)).Should().Contain(expected);
 

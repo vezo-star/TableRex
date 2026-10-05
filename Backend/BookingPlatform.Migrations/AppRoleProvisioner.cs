@@ -34,6 +34,12 @@ public sealed partial class AppRoleProvisioner(ILogger<AppRoleProvisioner> logge
             return $"APP_DB_PASSWORD must be {MinPasswordLength}-{MaxPasswordLength} printable ASCII characters without spaces.";
         }
 
+        // The Api and Worker receive it inside an unquoted connection string, where these would end or quote the value.
+        if (password.IndexOfAny([';', '\'', '"']) >= 0)
+        {
+            return "APP_DB_PASSWORD must not contain ';' or quotes; it is embedded in connection strings.";
+        }
+
         if (password.Contains("CHANGE_ME", StringComparison.OrdinalIgnoreCase))
         {
             return "APP_DB_PASSWORD still contains the CHANGE_ME placeholder.";
