@@ -104,11 +104,25 @@ OWNER vs ADMIN difference: ownership transfer and tenant deletion/suspension req
 - **Uniform 404.** Unknown slugs, inactive or suspended tenants, inactive venues and venues with online booking off all return the same 404 `VENUE_NOT_FOUND`; unknown and malformed tokens return the same 404 `BOOKING_NOT_FOUND`.
 - **Audit.** Public creations and cancellations are audited with `user_id = NULL`, the caller's IP and user agent; status history uses source `PUBLIC`.
 
+### Password reset (Phase 9)
+
+- **No account enumeration.** `POST /auth/password/forgot` returns 202 for every well-formed address; unknown, disabled and throttled addresses get the same answer. Limits: 5 per 15 min per IP (`password-forgot`), 3 per hour per account (silent; Redis key is the SHA-256 of the normalised email), 10 resets per 15 min per IP (`password-reset`).
+- **Token handling.** The Api never sees a raw token: it stores a request, and the Worker generates 256 random bits at send time and stores only `SHA-256(token)` (unique, 32 bytes). The link is `/reset-password#<token>` — a fragment, so it never reaches servers, logs or `Referer` — and the page removes it from the address bar on load. Lookup is by hash under `FOR UPDATE`, so two concurrent resets with one token cannot both succeed.
+- **Lifetime.** Single use, 30 minutes. A newer request, a successful reset and a password change all void outstanding links. Expired requests are purged after 7 days.
+- **Effect.** A reset sets the password (policy enforced), clears lockout, revokes every refresh token (`PASSWORD_RESET`) and issues no session — the user signs in again. Requests and resets are audited (`auth.password.reset_requested`, `auth.password.reset`) with IP and user agent.
+
+### Email notifications (Phase 9)
+
+- Sent only from committed outbox rows by the Worker; a failed send never affects the booking. Payloads hold ids only; the Worker loads current data and skips anonymised customers, customers without email and bookings whose state no longer matches.
+- Templates HTML-encode every user-supplied value (names, special requests, venue and tenant names). Links come only from `Notifications:PublicBaseUrl` (validated absolute origin) and server-generated tokens — never from request headers.
+- `notification_deliveries` stores ids, template, status and provider message id, never recipient addresses or bodies. The development `Log` provider logs a masked recipient (`t***@example.test`) and subject only, because bodies contain manage and reset links.
+- SMTP credentials (`Notifications__Email__SmtpUsername` / `SmtpPassword`) are secrets; use TLS (`SmtpEnableSsl=true`, port 587) for any non-local relay.
+
 ## 7. Secrets & configuration
 
 - No secrets in source control. `.env.example` / `appsettings*.json` contain placeholders only.
 - Development: `dotnet user-secrets` or `.env` (git-ignored). Production: platform secret store injected as env vars.
-- Secrets: `Jwt__SigningKey`, `PublicBooking__TokenKey`, `ConnectionStrings__Postgres`, `ConnectionStrings__Redis`, `DEV_ADMIN_PASSWORD` (dev only), notification/payment provider keys (later).
+- Secrets: `Jwt__SigningKey`, `PublicBooking__TokenKey`, `ConnectionStrings__Postgres`, `ConnectionStrings__Redis`, `DEV_ADMIN_PASSWORD` (dev only), `Notifications__Email__SmtpPassword` (when the relay needs auth), payment provider keys (Phase 10).
 - Startup fails fast if required secrets are missing or too weak (signing key and public booking token key < 32 bytes or still a `change-me` placeholder).
 
 ## 8. Logging & sensitive data

@@ -18,7 +18,7 @@ The next phase starts only after the explicit instruction **"PROCEED TO NEXT PHA
 | 6 | Internal Staff Experience | **Complete** (2026-10-05) |
 | 7 | Real-time | **Complete** (2026-10-05) |
 | 8 | Public Booking | **Complete** (2026-10-05) |
-| 9 | Outbox & Notifications | Not started |
+| 9 | Outbox & Notifications | **Complete** (2026-10-05) |
 | 10 | Payments (abstractions) | Not started |
 | 11 | SaaS Features | Not started |
 | 12 | Production Hardening | Not started |
@@ -151,6 +151,14 @@ Build: notification outbox dispatcher in Worker, retries/backoff/dead-letter, `I
 
 Acceptance: notifications triggered only from committed events; failure never rolls back bookings; retry/dead-letter tested.
 
+Completion notes (2026-10-05):
+- Backend: V029 (`notification_deliveries`, `password_reset_requests`); `NotificationOutboxDispatcher` in the Worker on the shared outbox core (8 attempts, 2 min lease, no age cut-off); Application `NotificationService` + `EmailTemplates` (BookingConfirmed, BookingRequested for PENDING, BookingCancelled, PasswordReset; plain text + HTML, every user value HTML-encoded); `IEmailProvider` with `SmtpEmailProvider` (SMTP relay or pickup directory, System.Net.Mail — no new package) and `LogEmailProvider` (masked recipient + subject only). Confirming a PENDING/HELD booking now queues a confirmation. Password reset: `POST /api/v1/auth/password/forgot` (always 202) and `/password/reset`; the Worker generates the token when it sends, only its SHA-256 is stored; reset revokes every refresh token and earlier links; changing the password also voids outstanding links. Housekeeping purges expired reset requests (7 days) and delivery records (180 days). Mailpit added to `docker-compose.yml`. Release build 0 warnings; 262 backend tests green (new: 4 `NotificationTests` with the Worker's real DI graph and a capturing provider, 17 template/options/masking unit tests).
+- Frontend: "Forgot password?" on the login page, `/forgot-password` (same answer whether or not the account exists) and `/reset-password#token` (token read from the fragment, removed from the address bar, inline policy errors, "request a new link" state). 190 Vitest tests green (6 new), ESLint/Prettier clean, `quasar build` succeeds.
+- Real run (dev database, Worker in Development against Mailpit): the backlog of NOTIFICATION rows from Phases 5–8 drained — 4 cancellations sent, 5 stale confirmations skipped with a reason; a new public booking's confirmation arrived in Mailpit in about 2 s with the venue-local date and time, encoded special requests and a manage link that opened the booking at 360 px; the guest cancel produced the cancellation email. Password reset in the browser for a throwaway admin: request → email → link → policy error shown → new password set → old password 401, new 200, link reuse `INVALID_RESET_TOKEN`, 14 refresh tokens revoked, both audit rows written. No tokens, passwords or guest addresses in Api/Worker logs.
+- Found and fixed: the Worker could not resolve `IAuditWriter` (no `ICurrentUser`/`IRequestMetadata` outside HTTP) — background implementations are now registered with `TryAdd`; `localhost` SMTP cost ~2 s per message on Windows (IPv6 first, Mailpit bound to 127.0.0.1) — dev config uses `127.0.0.1`.
+- Not built: reminders (architecture in D-079), email verification (D-080), SMS.
+- Decisions: D-075 – D-081.
+
 ## Phase 10 — Payments (abstractions only)
 
 Build: provider-independent `IPaymentProvider`, payment intents, deposits, payment status, refunds, webhook ingestion (authenticated, idempotent, audited), `HELD` booking expiry on unpaid deposit. No concrete provider unless instructed (PayFast, Peach Payments, Ozow later).
@@ -182,6 +190,9 @@ Full review against the checklist in the master specification §67 Phase 12 and 
 | ~~`Migrations seed-dev` command~~ | Done in Phase 2 | |
 | ~~`IVenueAccessGuard` and `/me.accessibleVenueIds`~~ | Done in Phase 3 | |
 | ~~Resource combinations CRUD~~ | Done in Phase 4 | |
-| Password reset / email verification | Phase 9 | Needs notifications |
+| ~~Password reset~~ | Done in Phase 9 | |
+| Email verification | When self-service sign-up exists | D-080: staff accounts are created by admins |
+| Booking reminders (scheduled emails) | Post-MVP | D-079: architecture documented; needs a scheduler table |
+| SMS notifications | Post-MVP | Needs a provider decision; `IEmailProvider` pattern applies |
 | ~~SignalR JS client (`realtimeService`)~~ | Done in Phase 7 | |
 | CI `package` stage (build and push images) | Phase 12 | Needs a registry and hosting decision; images are build-verified locally |

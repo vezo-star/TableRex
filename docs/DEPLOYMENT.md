@@ -8,6 +8,7 @@ Status: **Phase 1 — local development and container images implemented.** Prod
 |---|---|
 | PostgreSQL 18 | Compose service `postgres` (`postgres:18-alpine`), bound to `127.0.0.1:${POSTGRES_PORT:-5432}`, volume `postgres-data` at `/var/lib/postgresql` |
 | Redis 8 | Compose service `redis` (`redis:8-alpine`, password required), bound to `127.0.0.1:${REDIS_PORT:-6379}` |
+| Mailpit | Compose service `mailpit` (`axllent/mailpit:v1.27`): catches the Worker's development emails; SMTP `127.0.0.1:1025`, inbox UI `http://localhost:8025` |
 | Migrations | `dotnet run --project Backend/BookingPlatform.Migrations --launch-profile migrate -- migrate` |
 | Api | `dotnet run --project Backend/BookingPlatform.Api --launch-profile http` → `http://localhost:5080` |
 | Worker | `dotnet run --project Backend/BookingPlatform.Worker` |
@@ -31,8 +32,16 @@ Status: **Phase 1 — local development and container images implemented.** Prod
 | `ReverseProxy__TrustedNetworks__N` | Api | CIDRs of the reverse proxies whose `X-Forwarded-For/Proto` are trusted (e.g. `10.0.0.0/8`). Empty = only loopback. Required behind a proxy, otherwise rate limits key on the proxy IP. |
 | `RateLimiting__KeyPrefix` | Api | Redis key prefix for rate-limit counters (default `rl`); set per environment when sharing one Redis |
 | `RateLimiting__Policies__{policy}__PermitLimit`, `RateLimiting__Policies__{policy}__WindowSeconds` | Api | Optional per-IP overrides for `public-read` (120/60 s), `public-booking` (10/600 s), `public-manage` (60/60 s), `public-cancel` (10/600 s) and the auth policies |
-| `PublicBooking__TokenKey` | Api (Worker from Phase 9) | **Required secret.** ≥32 random bytes (base64), different from `Jwt__SigningKey`; startup fails if missing, short or a placeholder. Signs guest manage links; rotating it invalidates every outstanding link. |
+| `PublicBooking__TokenKey` | Api, Worker | **Required secret** (same value in both; the Worker builds manage links in emails). ≥32 random bytes (base64), different from `Jwt__SigningKey`; startup fails if missing, short or a placeholder. Signs guest manage links; rotating it invalidates every outstanding link. |
 | `PublicBooking__MaxActiveBookingsPerContact` | Api | Upcoming active public bookings allowed per email per venue (default 3, 1–100) |
+| `Notifications__PublicBaseUrl` | Worker | **Required.** Origin of the web app used in email links, e.g. `https://app.example.com` (absolute http/https, no path, no trailing slash). Development: `http://localhost:9000`. |
+| `Notifications__Email__Provider` | Worker | `Log` (default; delivers nothing, logs masked recipient + subject), `Smtp` (relay) or `Pickup` (writes `.eml` files) |
+| `Notifications__Email__FromAddress`, `Notifications__Email__FromName` | Worker | **Required** sender address (validated) and display name (default `Booking Platform`) |
+| `Notifications__Email__SmtpHost`, `SmtpPort`, `SmtpEnableSsl` | Worker | Relay for `Smtp` (defaults port 587, TLS on). Development uses Mailpit at `127.0.0.1:1025` without TLS — use the IP, not `localhost`, on Windows (IPv6 fallback adds ~2 s per message). |
+| `Notifications__Email__SmtpUsername`, `Notifications__Email__SmtpPassword` | Worker | Relay credentials (**secret**) when required |
+| `Notifications__Email__PickupDirectory` | Worker | Target directory for `Pickup` |
+| `Notifications__BatchSize`, `Notifications__PollSeconds`, `Notifications__MaxAttempts` | Worker | Dispatcher tuning (defaults 20, 5, 8). Wake-up is instant via `LISTEN outbox`; polling is the fallback. |
+| `MAILPIT_SMTP_PORT`, `MAILPIT_UI_PORT` | Compose | Local Mailpit ports (defaults 1025 / 8025; UI at `http://localhost:8025`) |
 | `DEV_ADMIN_EMAIL`, `DEV_ADMIN_PASSWORD` | Migrations `seed-dev` | Development only; password ≥12 chars. `seed-dev` refuses to run when `DOTNET_ENVIRONMENT=Production`. |
 
 PostgreSQL connections default to `GSS Encryption Mode=Disable` unless the connection string sets it: the platform uses password authentication, and the .NET runtime images do not ship the Kerberos library that Npgsql otherwise probes for.

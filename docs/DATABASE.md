@@ -1,6 +1,6 @@
 # Database
 
-Status: **Phases 1–8 implemented (V001–V028).** SQL below is illustrative; the migrations are the source of truth once written, and this document is updated to match them.
+Status: **Phases 1–9 implemented (V001–V029).** SQL below is illustrative; the migrations are the source of truth once written, and this document is updated to match them.
 
 ## 1. Platform
 
@@ -17,7 +17,7 @@ Status: **Phases 1–8 implemented (V001–V028).** SQL below is illustrative; t
 - **Immutable once merged** to main. Corrections are new migrations.
 - Execution: `dotnet run --project Backend/BookingPlatform.Migrations --launch-profile migrate -- migrate` locally, or the `migrator` image (`docker run --rm -e ConnectionStrings__Postgres=... bookingplatform/migrator`). Exit codes: 0 success (including "nothing to apply"), 1 failure or missing connection string, 2 unknown command. The Api may auto-migrate only in Development when `Database__AutoMigrate=true`. Production runs the migrator as an explicit deployment step/job.
 - Script names are validated (`V###__lower_snake.sql`, unique version numbers) by a unit test, so a misnamed file fails CI rather than being silently skipped.
-- Implemented: **V001__extensions** (Phase 1); **V002–V005, V023, V027** (Phase 2); **V006–V013** (Phase 3); **V014–V020** (Phase 4); **V021, V022, V024–V026** (Phase 5); **V028** (Phase 8).
+- Implemented: **V001__extensions** (Phase 1); **V002–V005, V023, V027** (Phase 2); **V006–V013** (Phase 3); **V014–V020** (Phase 4); **V021, V022, V024–V026** (Phase 5); **V028** (Phase 8); **V029** (Phase 9).
 - Dev data: `--launch-profile seed-dev` (C# seeder, idempotent; runs migrations first; creates Demo Hospitality and Demo Coworking, the dev admin as platform admin + owner of both, and manager/host/staff/viewer users in Demo Hospitality; all passwords come from `DEV_ADMIN_PASSWORD`; refuses when `DOTNET_ENVIRONMENT=Production`). Phase 3 adds Demo Restaurant and Demo Club (Demo Hospitality) and Demo Workspace (Demo Coworking) with sections, resource types, resources, weekly hours and a floor plan each; a venue's contents are only seeded when the venue itself is created, so edits made in the app survive re-runs. Phase 4 adds a "Tables 4 + 5" combination to a newly created Demo Restaurant.
 - Out-of-order numbers: DbUp applies every script missing from the journal, sorted by name, so a database that already has V027 still receives V006–V022 later. Consequently a lower-numbered migration added later must not depend on data or objects from a higher-numbered one that was applied earlier, and vice versa.
 
@@ -64,6 +64,12 @@ Status: **Phases 1–8 implemented (V001–V028).** SQL below is illustrative; t
 - V028: `venues.public_booking_enabled boolean NOT NULL DEFAULT true` and `venues.public_cancellation_cutoff_minutes integer NOT NULL DEFAULT 120` with `CHECK (BETWEEN 0 AND 10080)` (up to 7 days). Existing venues stay bookable online.
 - No new indexes: slug lookups use `uq_tenants_slug` then `uq_venues_tenant_slug`; manage links use `uq_bookings_public_token_hash` (V015).
 - Public bookings set `bookings.source = 'PUBLIC'`, `created_by_user_id = NULL`, and `public_token_hash = SHA-256(manage token)`; their history rows use source `PUBLIC`.
+
+### Phase 9 schema notes
+
+- V029 `notification_deliveries`: one row per outbox message and channel settled by the notification dispatcher — `status` `SENT` or `SKIPPED` (with `detail` ≤ 500 chars), `template`, `provider`, `provider_message_id`, optional `tenant_id` (FK CASCADE), `booking_id` (no FK: bookings are never deleted) and `user_id` (FK SET NULL). `uq_notification_deliveries_message (outbox_message_id, channel)` makes recording idempotent (`ON CONFLICT DO NOTHING`) and is the "already handled" check; the partial index `(booking_id, template) WHERE booking_id IS NOT NULL` serves "this booking already got this template". No recipient addresses or bodies are stored. Purged after 180 days.
+- V029 `password_reset_requests`: `user_id` (FK CASCADE), `token_hash bytea NULL` (unique, exactly 32 bytes when set — written by the Worker at send time), `expires_at` (CHECK `> created_at`), `used_at`, `invalidated_at`, `requested_ip`. Indexes on `(user_id, created_at DESC)` and `expires_at`. Purged 7 days after expiry.
+- Password reset outbox rows have `tenant_id = NULL` (users are global) and payload `{ eventId, type: "PasswordReset", requestId, occurredAt }`.
 
 ### Planned sequence and phase
 

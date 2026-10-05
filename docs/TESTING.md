@@ -1,6 +1,6 @@
 # Testing
 
-Status: **Phases 1–8 implemented** (241 backend tests, 184 Vitest tests at the end of Phase 8). Each phase adds the tests listed for it; a phase is not complete while any test fails.
+Status: **Phases 1–9 implemented** (262 backend tests, 190 Vitest tests at the end of Phase 9). Each phase adds the tests listed for it; a phase is not complete while any test fails.
 
 ## 0. Running the suites
 
@@ -75,6 +75,8 @@ Database isolation: migrations are applied once to a template database; each tes
 - **Booking engine**: create (single, combination, auto-assign), validation failures write nothing, move (success, conflict leaves original allocation intact), cancel releases allocation (resource re-bookable), no-show, complete-early truncation, hold → booking conversion, expired hold doesn't block, block prevents booking, all side tables written (history, events, audit, outbox) in the same transaction.
 - **Idempotency (mandatory)**: same key + same body twice → one booking, identical response, `Idempotent-Replayed`; same key + different body → 409 `IDEMPOTENCY_CONFLICT`; two concurrent requests with the same key → one booking.
 - **Outbox**: message written with booking; rollback writes none; dispatcher marks processed; failure increments attempts with backoff; dead-letter after max; crashed lease reclaimed; notification failure never affects the booking.
+- **Notifications (Phase 9, `Notifications/NotificationTests.cs`)**: the Worker's DI graph (`AddInfrastructure` + `AddPublicBookingTokens` + `AddNotifications`, built with `ValidateOnBuild`) against the test database, with a capturing `IEmailProvider`. Covers: public booking → one confirmation with venue-local time, HTML-encoded special requests, Reply-To venue email and a manage link that opens the booking; re-queued message not sent twice; guest cancel → cancellation without a manage link; PENDING → "request received", staff confirm → "confirmed"; staff booking without a manage link; skips for no email, anonymised customer and booking cancelled before sending; transport failure → FAILED with backoff → DEAD after `MaxAttempts`, booking untouched, no delivery record; permanent failure, unknown type and malformed payload dead-lettered at once; password reset end to end (unknown email queues nothing, token only hashed, policy error keeps the link usable, wrong token 400, reset revokes refresh tokens, old password fails, reuse 400, superseded request skipped, expired link 400, per-account throttle).
+- **Templates and options (unit, `Notifications/NotificationTemplateTests.cs`)**: local-time rendering, HTML encoding, template choice by type/status, `NotificationOptions.IsValid` (origin shape, provider settings, sender) and recipient masking.
 
 ## 5. Concurrency tests (mandatory, Phase 5)
 

@@ -177,6 +177,22 @@ Changing an Accepted decision requires the stop-and-explain process in `AGENTS.m
 
 **D-074 — Rate-limit policies are configurable per environment.** Accepted. `[RateLimit(policy, limit, window)]` defaults can be overridden with `RateLimiting:Policies:{policy}:PermitLimit` / `WindowSeconds`, so production can tune limits without a release and integration tests can raise them for race tests.
 
+## Phase 9 implementation decisions (2026-10-05)
+
+**D-075 — One `NotificationService` plus `IEmailProvider` instead of a separate `INotificationSender`.** Accepted. The service turns an outbox message into at most one email (load facts, decide, render, send, record); the provider is only the transport. A second abstraction layer would have one implementation. SMS or push would add a sibling provider interface and a channel value in `notification_deliveries`.
+
+**D-076 — Emails are decided at send time from current data; every outcome is recorded.** Accepted. Payloads carry ids only (D-052), so the Worker re-reads the booking: a confirmation for a booking cancelled meanwhile is skipped, a PENDING booking gets "request received", a later confirm sends "confirmed". `notification_deliveries` holds one row per outbox message and channel (`SENT` or `SKIPPED` with a reason), unique on `(outbox_message_id, channel)`; a message already recorded is never sent again, and a booking never gets the same template twice. Recipients are not stored there, so anonymisation leaves nothing behind. Delivery is at-least-once: a crash between the SMTP hand-off and the record can repeat one email.
+
+**D-077 — SMTP through System.Net.Mail; no email SDK.** Accepted. `SmtpEmailProvider` covers any SMTP relay (Mailpit in development; SES, SendGrid, Mailgun or Postmark SMTP in production) and a pickup directory, with no new package. `FormatException` and 5xx recipient rejections are permanent (dead-letter at once); everything else retries. Microsoft calls `SmtpClient` adequate for relays but not modern protocols; if a provider's HTTP API or OAuth is needed, add another `IEmailProvider` (for example MailKit) behind the same interface.
+
+**D-078 — Password reset tokens are created by the Worker at send time.** Accepted. The Api records a request (no token) and an outbox row in one transaction, and always answers 202. The Worker generates 256 random bits, stores `SHA-256(token)` only if the request is still open, and emails `/reset-password#token`; the raw token exists only in the email. Single use, 30 minutes, a newer request or a password change voids older ones; reset revokes every refresh token and clears lockout. Per-IP limits (`password-forgot` 5/15 min, `password-reset` 10/15 min) plus a silent per-account limit (3/hour) stop email bombing without revealing whether an account exists.
+
+**D-079 — Reminders: architecture only.** Proposed. A `scheduled_notifications` table (booking id, type, `due_at`, status) written in the booking transaction and rewritten on move/cancel; a Worker job claims due rows with `SKIP LOCKED` and writes a NOTIFICATION outbox row, reusing the dispatcher, dedupe and skip rules above. Not built because no venue setting or template for reminder timing exists yet.
+
+**D-080 — No email verification flow yet.** Accepted. Staff accounts are created by tenant admins or the platform (there is no self-service sign-up), and guests do not have accounts. Add verification together with self-service sign-up or invitations by email.
+
+**D-081 — The Worker builds links from `Notifications:PublicBaseUrl`.** Accepted. Links never use request data (no host-header injection); the value must be an absolute http(s) origin without a path or trailing slash and is validated on start, together with the sender address and provider settings.
+
 ## Risk register
 
 | # | Risk | Impact | Mitigation |

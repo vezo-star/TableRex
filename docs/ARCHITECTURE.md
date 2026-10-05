@@ -125,9 +125,9 @@ Availability is advisory; the booking transaction always re-validates against Po
 | Process | Job | Mechanism |
 |---|---|---|
 | Api | Realtime outbox dispatcher | Claims `destination = 'REALTIME'` outbox rows with `FOR UPDATE SKIP LOCKED`, publishes via `IHubContext` (Redis backplane fans out to all instances). Woken by `LISTEN outbox` + 1–2 s polling fallback. |
-| Worker | Notification outbox dispatcher | Claims `destination = 'NOTIFICATION'` rows; sends via `INotificationSender` abstraction (email/SMS providers pluggable). Exponential backoff, dead-letter after max attempts. |
+| Worker | Notification outbox dispatcher | `NotificationOutboxDispatcher` claims `destination = 'NOTIFICATION'` rows (instant `LISTEN outbox` wake-up, 5 s poll fallback) and hands each to the Application `NotificationService` in its own DI scope: load current booking/user facts, skip what no longer applies, render `EmailTemplates`, send through `IEmailProvider` (`Smtp`/`Pickup`/`Log`), record the outcome in `notification_deliveries`. Backoff `2^n` s ± 20 %, dead-letter after 8 attempts; permanent errors dead-letter at once (D-075 – D-078). |
 | Worker | Expired-hold sweeper | Periodically deactivates expired hold allocations, marks holds `EXPIRED`, writes `HoldExpired` outbox rows. Booking transactions also release expired holds lazily, so correctness never depends on sweeper timing. |
-| Worker | Retention cleanup | Purges expired idempotency records and old processed outbox rows per `DATABASE.md` retention policy. |
+| Worker | Retention cleanup | Purges expired idempotency records, old refresh tokens, processed outbox rows, expired password reset requests and old notification delivery records per `DATABASE.md` retention policy. |
 
 All background services honour `CancellationToken` and shut down gracefully; processing is at-least-once, so handlers are idempotent.
 
@@ -183,4 +183,4 @@ Key behaviours:
 
 ## 12. Integration boundaries (future)
 
-Notifications (`INotificationSender`), payments (`IPaymentProvider`, Phase 10), external API clients (API keys/service credentials, later), webhooks, POS/CRM/calendar connectors — each behind an Application interface fed by outbox events. The booking engine never calls an external system inside its transaction.
+Notifications (`NotificationService` + `IEmailProvider`), payments (`IPaymentProvider`, Phase 10), external API clients (API keys/service credentials, later), webhooks, POS/CRM/calendar connectors — each behind an Application interface fed by outbox events. The booking engine never calls an external system inside its transaction.

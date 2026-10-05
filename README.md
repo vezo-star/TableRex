@@ -53,9 +53,9 @@ Frontend/
 # 1. Local secrets: copy the template and replace every CHANGE_ME value (.env is git-ignored)
 Copy-Item .env.example .env
 
-# 2. Start PostgreSQL 18 and Redis 8
+# 2. Start PostgreSQL 18, Redis 8 and Mailpit (development email inbox: http://localhost:8025)
 docker compose up -d
-docker compose ps            # both services should report (healthy)
+docker compose ps            # postgres and redis should report (healthy)
 
 # 3. Copy connection strings into .NET user-secrets (shared by Api, Worker and Migrations)
 ./scripts/dev-secrets.ps1    # macOS/Linux: ./scripts/dev-secrets.sh
@@ -65,6 +65,7 @@ dotnet run --project Backend/BookingPlatform.Migrations --launch-profile migrate
 dotnet run --project Backend/BookingPlatform.Migrations --launch-profile seed-dev
 
 # 5. Run the Api (http://localhost:5080, Swagger at /swagger) and the Worker
+#    (the Worker sends booking and password reset emails to Mailpit in Development)
 dotnet run --project Backend/BookingPlatform.Api --launch-profile http
 dotnet run --project Backend/BookingPlatform.Worker
 

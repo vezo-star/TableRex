@@ -1,6 +1,6 @@
 # API
 
-Status: **Phases 1–8 implemented** (health, auth, tenancy, staff, venues, resources, availability, bookings, holds, blocks, board, customers, audit, SignalR, public booking); later sections are the planned surface. Each endpoint is marked with the phase that implements it. This document and Swagger must match the real implementation once built.
+Status: **Phases 1–9 implemented** (health, auth incl. password reset, tenancy, staff, venues, resources, availability, bookings, holds, blocks, board, customers, audit, SignalR, public booking); later sections are the planned surface. Each endpoint is marked with the phase that implements it. This document and Swagger must match the real implementation once built.
 
 ## 1. Conventions
 
@@ -49,6 +49,7 @@ Public endpoints never include internal ids such as `conflictingResourceIds`.
 |---|---|
 | VALIDATION_ERROR | 400 |
 | IDEMPOTENCY_KEY_REQUIRED | 400 |
+| INVALID_RESET_TOKEN | 400 |
 | INVALID_BOOKING_TIME | 422 |
 | PARTY_SIZE_NOT_SUPPORTED | 422 |
 | OUTSIDE_OPERATING_HOURS | 422 |
@@ -104,7 +105,14 @@ Auth response:
 }
 ```
 
-Password reset / email verification: Phase 9 (needs notifications).
+Password reset (Phase 9 — implemented):
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| POST | `/api/v1/auth/password/forgot` | anonymous; 5 per 15 min per IP (`password-forgot`) + silent 3 per hour per account | `{ email }` → always **202**, whether or not the address belongs to an active account. The Worker emails `{PublicBaseUrl}/reset-password#<token>`; the link works once and expires after 30 minutes. A newer request voids older links. Malformed email → 400. |
+| POST | `/api/v1/auth/password/reset` | anonymous; 10 per 15 min per IP (`password-reset`) | `{ token, newPassword }` → **204**. Sets the password, clears lockout, marks the link used, voids the account's other links and revokes every refresh token (all devices signed out; no new session is issued). Unknown, used, superseded or expired token, or an inactive account → 400 `INVALID_RESET_TOKEN`; password policy failure → 400 `VALIDATION_ERROR` on `newPassword` (the link stays usable). |
+
+Email verification is not implemented (D-080).
 
 ### Tenancy & staff (Phase 2 — implemented)
 
