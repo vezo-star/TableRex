@@ -4,6 +4,8 @@
 stages:
   - build
   - test
+  - package
+  - e2e
 
 workflow:
   rules:
@@ -147,3 +149,75 @@ backend:integration-tests:
       --configuration Release --no-restore
       --results-directory "$RESULTS_DIR/integration"
       --report-xunit-junit --report-xunit-junit-filename integration-tests.xml
+
+# ---------------------------------------------------------------------------
+# Package: images for deploy/compose.yml (IMAGE_REGISTRY=$CI_REGISTRY_IMAGE, IMAGE_TAG=<sha or tag>)
+# ---------------------------------------------------------------------------
+
+package:images:
+  stage: package
+  image: docker:29
+  services:
+    - name: docker:29-dind
+      alias: docker
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+  rules:
+    - if: $CI_COMMIT_TAG || $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  needs:
+    - job: backend:unit-tests
+      artifacts: false
+    - job: backend:integration-tests
+      artifacts: false
+    - job: frontend:build
+      artifacts: false
+  parallel:
+    matrix:
+      - SERVICE: [api, worker, migrator, web]
+  before_script:
+    # CI_JOB_TOKEN is the short-lived per-job registry credential supplied by GitLab.
+    - echo "$CI_JOB_TOKEN" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+  script:
+    - IMAGE="$CI_REGISTRY_IMAGE/$SERVICE"
+    - docker build --pull -f "docker/$SERVICE.Dockerfile" -t "$IMAGE:$CI_COMMIT_SHORT_SHA" .
+    - docker push "$IMAGE:$CI_COMMIT_SHORT_SHA"
+    - |
+      if [ -n "$CI_COMMIT_TAG" ]; then
+        docker tag "$IMAGE:$CI_COMMIT_SHORT_SHA" "$IMAGE:$CI_COMMIT_TAG"
+        docker push "$IMAGE:$CI_COMMIT_TAG"
+      fi
+
+# ---------------------------------------------------------------------------
+# E2E: Playwright journeys against a deployed staging environment (never production).
+# Needs protected, masked CI/CD variables E2E_BASE_URL, E2E_ADMIN_EMAIL and E2E_ADMIN_PASSWORD
+# (a platform admin of that environment). Each run provisions its own tenant.
+# ---------------------------------------------------------------------------
+
+e2e:staging:
+  stage: e2e
+  image: mcr.microsoft.com/playwright:v1.63.0-noble
+  needs: []
+  rules:
+    - if: $E2E_BASE_URL && ($CI_COMMIT_TAG || $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH)
+      when: manual
+      allow_failure: true
+  cache:
+    key:
+      prefix: npm
+      files:
+        - Frontend/BookingPlatform.Web/package-lock.json
+    paths:
+      - .npm/
+    policy: pull
+  script:
+    - cd Frontend/BookingPlatform.Web
+    - npm ci
+    - npx playwright test
+  artifacts:
+    when: always
+    expire_in: 1 week
+    paths:
+      - Frontend/BookingPlatform.Web/test-results/
+    reports:
+      junit: Frontend/BookingPlatform.Web/test-results/e2e-junit.xml
