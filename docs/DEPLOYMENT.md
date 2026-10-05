@@ -1,31 +1,47 @@
 # Deployment
 
-Status: **Phase 0 — outline.** Local development is implemented in Phase 1; production deployment and runbooks are finalised in Phase 12.
+Status: **Phase 1 — local development and container images implemented.** Production deployment and runbooks are finalised in Phase 12.
 
-## 1. Local development (Phase 1)
+## 1. Local development
 
 | Component | How it runs |
 |---|---|
-| PostgreSQL 18 | Docker Compose service `postgres`, port 5432, named volume |
-| Redis 8 | Docker Compose service `redis`, port 6379 |
-| Migrations | `dotnet run --project Backend/BookingPlatform.Migrations -- migrate` (and `seed-dev`) |
-| Api | `dotnet run --project Backend/BookingPlatform.Api` (Development) |
+| PostgreSQL 18 | Compose service `postgres` (`postgres:18-alpine`), bound to `127.0.0.1:${POSTGRES_PORT:-5432}`, volume `postgres-data` at `/var/lib/postgresql` |
+| Redis 8 | Compose service `redis` (`redis:8-alpine`, password required), bound to `127.0.0.1:${REDIS_PORT:-6379}` |
+| Migrations | `dotnet run --project Backend/BookingPlatform.Migrations --launch-profile migrate -- migrate` |
+| Api | `dotnet run --project Backend/BookingPlatform.Api --launch-profile http` → `http://localhost:5080` |
 | Worker | `dotnet run --project Backend/BookingPlatform.Worker` |
-| Web | `npm run dev` in `Frontend/BookingPlatform.Web` (Quasar dev server proxies `/api` and `/hubs` to the Api → same origin, so the refresh cookie works) |
+| Web | `npm run dev` in `Frontend/BookingPlatform.Web` → `http://localhost:9000` (proxies `/api`, `/health` and `/hubs` to the Api → same origin, so the refresh cookie works) |
 
-Environment variables are documented in `.env.example` (placeholders only). Copy to `.env` (git-ignored).
+`.env.example` documents every variable with placeholders. Copy it to `.env` (git-ignored); Compose reads it directly and `scripts/dev-secrets.ps1` / `scripts/dev-secrets.sh` copy the .NET values into user-secrets (one `UserSecretsId` shared by Api, Worker and Migrations). Both scripts refuse values that still contain `CHANGE_ME`.
 
-Planned variables:
+| Variable | Used by | Purpose |
+|---|---|---|
+| `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_PORT` | Compose | Local PostgreSQL |
+| `REDIS_PASSWORD`, `REDIS_PORT` | Compose | Local Redis |
+| `ConnectionStrings__Postgres` | Api, Worker, Migrations | Required; startup fails without it |
+| `ConnectionStrings__Redis` | Api, Worker | Required; `abortConnect=false` is forced so the Api serves without Redis |
+| `Cors__AllowedOrigins__N` | Api | Explicit SPA origins (absolute http/https, no path); never a wildcard |
+| `Database__AutoMigrate` | Api | Development only; `false` by default |
+| `LogFormat` | Api, Worker | `json` (default, compact JSON) or `text` (Development) |
+| `VITE_API_BASE_URL` | Web build | API base path baked into the SPA (default `/api`); never put secrets in `VITE_*` |
 
-| Variable | Purpose |
-|---|---|
-| `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | Compose PostgreSQL |
-| `ConnectionStrings__Postgres` | Api/Worker/Migrations |
-| `ConnectionStrings__Redis` | Api/Worker |
-| `Jwt__Issuer`, `Jwt__Audience`, `Jwt__SigningKey` | Token issuance (key ≥ 32 random bytes) |
-| `Cors__AllowedOrigins__0` | Allowed SPA origins |
-| `DEV_ADMIN_EMAIL`, `DEV_ADMIN_PASSWORD` | Dev seeder only |
-| `VITE_API_BASE_URL` | Frontend build-time API base |
+Added in later phases: `Jwt__*` (Phase 2), `DEV_ADMIN_EMAIL` / `DEV_ADMIN_PASSWORD` (dev seeder, Phase 2).
+
+PostgreSQL connections default to `GSS Encryption Mode=Disable` unless the connection string sets it: the platform uses password authentication, and the .NET runtime images do not ship the Kerberos library that Npgsql otherwise probes for.
+
+## 1a. Container images
+
+All Dockerfiles live in `docker/` and use the repository root as build context.
+
+| Image | Dockerfile | Base | Runs as | Notes |
+|---|---|---|---|---|
+| `api` | `docker/api.Dockerfile` | `mcr.microsoft.com/dotnet/aspnet:10.0` | `$APP_UID` (1654) | Listens on 8080; Swagger disabled outside Development/Test |
+| `worker` | `docker/worker.Dockerfile` | `mcr.microsoft.com/dotnet/runtime:10.0` | `$APP_UID` | Graceful SIGTERM shutdown (30 s timeout) |
+| `migrator` | `docker/migrator.Dockerfile` | `mcr.microsoft.com/dotnet/runtime:10.0` | `$APP_UID` | Default command `migrate`; exit 0 success, 1 failure, 2 usage |
+| `web` | `docker/web.Dockerfile` | `node:24-alpine` → `nginx:alpine` | `nginx` (101) | Listens on 8080; SPA fallback, CSP and security headers; `VITE_API_BASE_URL` build arg |
+
+The `web` container serves only the SPA: `/api`, `/hubs` and `/health` return 404 there and must be routed to the Api by the reverse proxy in front of both.
 
 ## 2. Production topology (target)
 

@@ -15,7 +15,9 @@ Status: **Phase 0 — proposed design.** SQL below is illustrative; the migratio
 - Tool: **DbUp** (`dbup-postgresql`), scripts embedded from `database/migrations/` into `BookingPlatform.Migrations`.
 - File naming: `V001__extensions.sql`, `V002__tenants.sql`, ... applied in lexical order; journal table `public.schema_versions`. Each script runs in its own transaction.
 - **Immutable once merged** to main. Corrections are new migrations.
-- Execution: `dotnet run --project Backend/BookingPlatform.Migrations -- migrate` (CI, deployments, dev). The Api may auto-migrate only in Development when `Database__AutoMigrate=true`. Production runs the migrator as an explicit deployment step/job.
+- Execution: `dotnet run --project Backend/BookingPlatform.Migrations --launch-profile migrate -- migrate` locally, or the `migrator` image (`docker run --rm -e ConnectionStrings__Postgres=... bookingplatform/migrator`). Exit codes: 0 success (including "nothing to apply"), 1 failure or missing connection string, 2 unknown command. The Api may auto-migrate only in Development when `Database__AutoMigrate=true`. Production runs the migrator as an explicit deployment step/job.
+- Script names are validated (`V###__lower_snake.sql`, unique version numbers) by a unit test, so a misnamed file fails CI rather than being silently skipped.
+- Implemented: **V001__extensions** (Phase 1).
 - Dev data: `-- seed-dev` (C# seeder; hashes the dev admin password from `DEV_ADMIN_PASSWORD`; refuses when `DOTNET_ENVIRONMENT=Production`).
 
 ### Planned sequence and phase

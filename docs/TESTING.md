@@ -1,6 +1,21 @@
 # Testing
 
-Status: **Phase 0 — strategy.** Each phase adds the tests listed for it; a phase is not complete while any test fails.
+Status: **Phase 1 — harness implemented.** Each phase adds the tests listed for it; a phase is not complete while any test fails.
+
+## 0. Running the suites
+
+| Suite | Command | Needs |
+|---|---|---|
+| Backend unit | `dotnet test --project Backend/Tests/BookingPlatform.UnitTests` | — |
+| Backend integration | `dotnet test --project Backend/Tests/BookingPlatform.IntegrationTests` | Docker running |
+| Only non-Docker integration tests | add `--filter-not-trait "Category=Docker"` | — |
+| Frontend | `npm test` in `Frontend/BookingPlatform.Web` | — |
+
+- Test projects use **xUnit v3 on Microsoft.Testing.Platform** (`global.json` → `"test": { "runner": "Microsoft.Testing.Platform" }`). The VSTest packages (`Microsoft.NET.Test.Sdk`, `xunit.runner.visualstudio`) are not used; on the .NET 10 SDK `dotnet test` requires `--project`.
+- JUnit for CI is produced natively: `--results-directory <dir> --report-xunit-junit --report-xunit-junit-filename <name>.xml`; Vitest uses its built-in `junit` reporter.
+- Integration fixture (`InfrastructureFixture`): one PostgreSQL 18 and one Redis 8 container per test run (xUnit collection fixture "Infrastructure"); migrations are applied once to `booking_template`, and tests get a fresh database via `CREATE DATABASE x TEMPLATE booking_template` (or an empty one for migration-from-empty tests).
+- Api tests use `WebApplicationFactory<Program>` in the `Test` environment with in-memory configuration; a test-only controller (`__tests/errors`) is added as an application part to exercise exception → ProblemDetails mapping without shipping test endpoints.
+- jsdom lacks `ScreenOrientation` and `ResizeObserver`; `test/vitest/setup.js` provides minimal stubs so Quasar components mount.
 
 ## 1. Tooling
 

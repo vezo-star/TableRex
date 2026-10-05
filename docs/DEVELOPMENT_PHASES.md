@@ -3,12 +3,14 @@
 Workflow: Plan → Review → Approval → Implement → Verify → Document → Report → **STOP**.
 The next phase starts only after the explicit instruction **"PROCEED TO NEXT PHASE"**.
 
+> 2026-10-05 17:04 — the user instructed: continue with all remaining phases without stopping, verify that the app works, run security checks and fix what is broken; review the finished product afterwards. Phases 2+ therefore run back to back; each still goes through Implement → Verify → Document and gets its own commits and completion notes below.
+
 ## Status
 
 | Phase | Name | Status |
 |---|---|---|
 | 0 | Discovery & Architecture | **Approved** (2026-10-05) — D-002 .NET 10, D-014 AwesomeAssertions, D-018 venue-scoped access |
-| 1 | Foundation | Not started |
+| 1 | Foundation | **Complete** (2026-10-05) |
 | 2 | Authentication & Multi-tenancy | Not started |
 | 3 | Venues & Resources | Not started |
 | 4 | Availability Engine | Not started |
@@ -46,6 +48,11 @@ Build:
 - Dockerfiles (api, worker, migrator, web) — build verified.
 
 Acceptance: backend builds; frontend builds; Compose starts PostgreSQL and Redis; Api connects (ready check green); Swagger loads; tests run green; a clean clone can reproduce the environment by following README.
+
+Completion notes (2026-10-05):
+- Verified: Release build with 0 warnings; 37 unit tests, 18 integration tests (Testcontainers PostgreSQL 18.6 + Redis 8), 29 Vitest tests; Compose healthy; V001 applied and re-run is a no-op; `/health` 200, `/health/ready` 200 → 503 with Redis or PostgreSQL stopped → 200 after restart; Swagger UI/JSON 200 in Development, 404 in Production; ProblemDetails with `code`, `traceId`, `correlationId`; Worker graceful shutdown on SIGTERM (exit 0); all four images build and smoke-run as non-root; dev proxy and status page verified in a browser; `.gitlab-ci.yml` schema-validated with `gitlab-ci-local`.
+- Not verifiable locally: GitLab server-side CI Lint and a real pipeline run (no GitLab remote configured).
+- Known limitation: the first readiness probe after start takes 1–2.5 s on the PostgreSQL check (first physical connection and authentication); steady state is a few milliseconds.
 
 ## Phase 2 — Authentication & Multi-tenancy
 
@@ -121,3 +128,7 @@ Full review against the checklist in the master specification §67 Phase 12 and 
 | Availability caching | Only if measured need | Correctness first; avoid premature optimisation |
 | External API keys for server-to-server integrations | Post-Phase 8 | Public API first |
 | Row-Level Security | Phase 12 evaluation | Defense in depth on top of tested tenant scoping |
+| `http.js` auth header and single-flight refresh interceptors | Phase 2 | Needs the auth endpoints and `auth` store |
+| `Migrations seed-dev` command | Phase 2 | Needs tenants/users tables (D-016) |
+| SignalR JS client (`realtimeService`) | Phase 7 | Realtime phase |
+| CI `package` stage (build and push images) | Phase 12 | Needs a registry and hosting decision; images are build-verified locally |

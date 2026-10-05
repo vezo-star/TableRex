@@ -60,10 +60,11 @@ Backend/
   BookingPlatform.Domain          (no dependencies except NodaTime)
   BookingPlatform.Application     -> Domain
   BookingPlatform.Infrastructure  -> Application, Domain   (Npgsql, Dapper, StackExchange.Redis, ...)
-  BookingPlatform.Api             -> Application, Infrastructure (composition root only)
+  BookingPlatform.Api             -> Application, Infrastructure, Migrations (composition root only;
+                                     Migrations is referenced only for the Development auto-migrate option)
   BookingPlatform.Worker          -> Application, Infrastructure (composition root only)
-  BookingPlatform.Migrations      (DbUp runner + dev seeder; embeds database/migrations/*.sql)
-  Tests/BookingPlatform.UnitTests        -> Domain, Application
+  BookingPlatform.Migrations      (DbUp runner + dev seeder; embeds database/migrations/*.sql; no project references)
+  Tests/BookingPlatform.UnitTests        -> Domain, Application, Infrastructure, Migrations
   Tests/BookingPlatform.IntegrationTests -> Api, Infrastructure, Migrations (Testcontainers)
 ```
 

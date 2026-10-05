@@ -59,7 +59,7 @@ Changing an Accepted decision requires the stop-and-explain process in `AGENTS.m
 
 **D-002 — .NET 10 (LTS).** Accepted — approved change from the spec's ASP.NET Core 8.
 - Reason: .NET 8 LTS reaches end of support on 10 Nov 2026, about five weeks after project start; .NET 10 LTS is supported to Nov 2028. SDK 10.0.400 is installed; no .NET 8 SDK was present.
-- Consequences: all projects target `net10.0`; `global.json` pins SDK 10.0.x (roll forward within feature band); `Guid.CreateVersion7` available in C#. Library choices unchanged.
+- Consequences: all projects target `net10.0`; `global.json` requires SDK 10.0.400 or later within 10.0 (`rollForward: latestFeature`, no prereleases), so CI images with a newer 10.0 feature band work; `Guid.CreateVersion7` available in C#. Library choices unchanged.
 
 **D-014 — AwesomeAssertions for test assertions.** Accepted.
 - Reason: FluentAssertions v8+ requires a paid commercial licence (Xceed, Jan 2025). AwesomeAssertions is the Apache-2.0 community fork of FluentAssertions 7 with a near-identical API, so the spec's intent (fluent assertions) is preserved.
@@ -67,6 +67,18 @@ Changing an Accepted decision requires the stop-and-explain process in `AGENTS.m
 
 **D-018 — Venue-scoped staff access.** Accepted.
 - `tenant_user_venues` (created in V006 with venues). TENANT_OWNER/TENANT_ADMIN implicitly access all tenant venues; MANAGER, HOST, STAFF, VIEW_ONLY access only assigned venues. Enforced by `IVenueAccessGuard` and SignalR `JoinVenue`; inaccessible venues return 404 and are omitted from lists. Covered by the tenant isolation test suite.
+
+## Phase 1 implementation decisions (2026-10-05)
+
+**D-028 — Custom health checks.** Accepted. PostgreSQL (`SELECT 1` via the shared `NpgsqlDataSource`) and Redis (`PING` on the shared multiplexer) checks are ~30 lines each on top of the built-in ASP.NET Core health checks, so the `AspNetCore.HealthChecks.*` packages are not added. Failures report a one-line description without exception details or configuration values, and are not logged with stack traces per probe.
+
+**D-029 — Microsoft.Testing.Platform test runner.** Accepted. The .NET 10 SDK no longer runs xUnit v3 through VSTest by default; `global.json` opts into Microsoft.Testing.Platform, removing `Microsoft.NET.Test.Sdk` and `xunit.runner.visualstudio`. JUnit output is native (`--report-xunit-junit`), so no logger package is needed.
+
+**D-030 — Quasar app-vite v3.** Accepted. The Phase 1 plan named app-vite v2; v3 (3.10.x) is the current stable release supported by `create-quasar`. Consequences: imports use the `@/` alias; client env vars are exposed via `build.env.clientPrefix` (`VITE_`) as `import.meta.env.VITE_*`.
+
+**D-031 — PostgreSQL GSS encryption disabled by default.** Accepted. Npgsql's default `GssEncryptionMode=Prefer` probes for `libgssapi_krb5`, which the .NET runtime images lack, logging an error on each process start. The Infrastructure data source and the migrator set `Disable` unless the connection string specifies a mode. The platform uses password (SCRAM) authentication; Kerberos is out of scope.
+
+**D-032 — Structured console logging switch.** Accepted. `LogFormat` (`json` | `text`) selects compact JSON (default, containers) or a readable text template (Development). Serilog is registered with `preserveStaticLogger: true`, so no global static logger exists; request logging uses the DI logger.
 
 ## Risk register
 

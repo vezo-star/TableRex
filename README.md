@@ -7,7 +7,7 @@ Core model: **Tenant → Venue → Section → Bookable Resource → Availabilit
 
 ## Status
 
-**Phase 0 — Discovery & Architecture: approved.** Documentation only; no application code yet. Phase 1 starts on explicit instruction.
+**Phase 1 — Foundation: complete.** Backend solution, migrations, local infrastructure, Quasar shell, tests, Dockerfiles and GitLab CI are in place.
 See [`docs/DEVELOPMENT_PHASES.md`](docs/DEVELOPMENT_PHASES.md) for the roadmap and current phase.
 
 ## Stack
@@ -19,7 +19,7 @@ See [`docs/DEVELOPMENT_PHASES.md`](docs/DEVELOPMENT_PHASES.md) for the roadmap a
 - Tests: xUnit, Testcontainers, Vitest, Playwright
 - Local infrastructure: Docker Compose
 
-## Repository layout (target)
+## Repository layout
 
 ```
 AGENTS.md                 Permanent engineering rules (read first)
@@ -41,11 +41,48 @@ Frontend/
 
 ## Getting started
 
-Available from Phase 1. Prerequisites will be:
+### Prerequisites
 
-- .NET 10 SDK
-- Node.js 20+ and npm
-- Docker Desktop (running)
+- .NET 10 SDK (10.0.400 or a later 10.0 feature band; see `global.json`)
+- Node.js 24 (or 22.22+) and npm
+- Docker Desktop (running) — needed for Compose and for the integration tests (Testcontainers)
+
+### Quickstart
+
+```powershell
+# 1. Local secrets: copy the template and replace every CHANGE_ME value (.env is git-ignored)
+Copy-Item .env.example .env
+
+# 2. Start PostgreSQL 18 and Redis 8
+docker compose up -d
+docker compose ps            # both services should report (healthy)
+
+# 3. Copy connection strings into .NET user-secrets (shared by Api, Worker and Migrations)
+./scripts/dev-secrets.ps1    # macOS/Linux: ./scripts/dev-secrets.sh
+
+# 4. Apply database migrations
+dotnet run --project Backend/BookingPlatform.Migrations --launch-profile migrate -- migrate
+
+# 5. Run the Api (http://localhost:5080, Swagger at /swagger) and the Worker
+dotnet run --project Backend/BookingPlatform.Api --launch-profile http
+dotnet run --project Backend/BookingPlatform.Worker
+
+# 6. Run the web app (http://localhost:9000; proxies /api, /health and /hubs to the Api)
+cd Frontend/BookingPlatform.Web
+npm ci
+npm run dev
+```
+
+### Common commands
+
+| Task | Command |
+|---|---|
+| Build backend | `dotnet build Backend/BookingPlatform.sln` |
+| Unit tests | `dotnet test --project Backend/Tests/BookingPlatform.UnitTests` |
+| Integration tests (Docker required) | `dotnet test --project Backend/Tests/BookingPlatform.IntegrationTests` |
+| Frontend lint / tests / build | `npm run lint`, `npm test`, `npm run build` (in `Frontend/BookingPlatform.Web`) |
+| Container images | `docker build -f docker/<api\|worker\|migrator\|web>.Dockerfile -t bookingplatform/<name> .` |
+| Liveness / readiness | `GET /health`, `GET /health/ready` |
 
 ## Documentation
 
