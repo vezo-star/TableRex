@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>BookingPlatform.UnitTests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\BookingPlatform.Domain\BookingPlatform.Domain.csproj" />
+    <ProjectReference Include="..\..\BookingPlatform.Application\BookingPlatform.Application.csproj" />
+    <ProjectReference Include="..\..\BookingPlatform.Infrastructure\BookingPlatform.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\BookingPlatform.Migrations\BookingPlatform.Migrations.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="AwesomeAssertions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <Using Include="AwesomeAssertions" />
+  </ItemGroup>
+
+</Project>

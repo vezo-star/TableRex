@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+  <PropertyGroup>
+    <RootNamespace>BookingPlatform.Worker</RootNamespace>
+    <UserSecretsId>$(BookingPlatformUserSecretsId)</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BookingPlatform.Application\BookingPlatform.Application.csproj" />
+    <ProjectReference Include="..\BookingPlatform.Infrastructure\BookingPlatform.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="Serilog.Extensions.Hosting" />
+    <PackageReference Include="Serilog.Settings.Configuration" />
+  </ItemGroup>
+
+</Project>
