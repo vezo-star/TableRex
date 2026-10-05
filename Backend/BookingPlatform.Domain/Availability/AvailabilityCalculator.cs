@@ -66,16 +66,7 @@ public static class AvailabilityCalculator
             throw new ArgumentOutOfRangeException(nameof(query), "Duration and slot interval must be positive and turnover non-negative.");
         }
 
-        var resourcesById = resources.ToDictionary(r => r.Id);
-        var singles = resources
-            .Where(r => r.MinCapacity <= query.PartySize && query.PartySize <= r.Capacity)
-            .ToList();
-        var eligibleCombinations = combinations
-            .Where(c => c.MinCapacity <= query.PartySize && query.PartySize <= c.Capacity)
-            .Where(c => c.Members.Any(m => m.IsRequired) && c.Members.Where(m => m.IsRequired).All(m => resourcesById.ContainsKey(m.ResourceId)))
-            .ToList();
-        var claimsByResource = claims.ToLookup(c => c.ResourceId);
-
+        var candidates = new Candidates(resources, combinations, claims, query.PartySize);
         var slots = new List<AvailabilitySlot>();
         foreach (var period in schedule.GetPeriods(query.BusinessDate))
         {
@@ -87,34 +78,86 @@ public static class AvailabilityCalculator
                 }
 
                 var end = start + query.Duration;
-                var claimEnd = end + query.Turnover;
-                bool IsFree(Guid resourceId) => !claimsByResource[resourceId].Any(c => c.Start < claimEnd && c.End > start);
-
-                var options = new List<AvailabilityOption>();
-                options.AddRange(singles
-                    .Where(r => IsFree(r.Id))
-                    .Select(r => new AvailabilityOption(AvailabilityOptionKind.Resource, r.Id, r.Name, r.Capacity, r.SortOrder, [r.Id])));
-
-                foreach (var combination in eligibleCombinations)
-                {
-                    if (!combination.Members.Where(m => m.IsRequired).All(m => IsFree(m.ResourceId)))
-                    {
-                        continue;
-                    }
-
-                    var allocated = combination.Members
-                        .Where(m => m.IsRequired || (resourcesById.ContainsKey(m.ResourceId) && IsFree(m.ResourceId)))
-                        .Select(m => m.ResourceId)
-                        .ToList();
-                    options.Add(new AvailabilityOption(AvailabilityOptionKind.Combination, combination.Id, combination.Name,
-                        combination.Capacity, combination.SortOrder, allocated));
-                }
-
-                slots.Add(new AvailabilitySlot(start, end, start.InZone(schedule.Zone).TimeOfDay, Rank(options)));
+                slots.Add(new AvailabilitySlot(start, end, start.InZone(schedule.Zone).TimeOfDay, candidates.At(start, end + query.Turnover)));
             }
         }
 
         return slots;
+    }
+
+    /// <summary>
+    /// Ranked options free for the claim window <c>[start, claimEnd)</c> (claimEnd includes turnover). Used by booking
+    /// auto-assignment so it picks exactly what the availability search would offer.
+    /// </summary>
+    public static IReadOnlyList<AvailabilityOption> OptionsAt(
+        Instant start,
+        Instant claimEnd,
+        int partySize,
+        IReadOnlyCollection<AvailabilityResource> resources,
+        IReadOnlyCollection<AvailabilityCombination> combinations,
+        IReadOnlyCollection<ResourceClaim> claims)
+    {
+        if (partySize < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(partySize), "Party size must be positive.");
+        }
+
+        if (claimEnd <= start)
+        {
+            throw new ArgumentOutOfRangeException(nameof(claimEnd), "The claim window must not be empty.");
+        }
+
+        return new Candidates(resources, combinations, claims, partySize).At(start, claimEnd);
+    }
+
+    private sealed class Candidates
+    {
+        private readonly Dictionary<Guid, AvailabilityResource> _resourcesById;
+        private readonly List<AvailabilityResource> _singles;
+        private readonly List<AvailabilityCombination> _combinations;
+        private readonly ILookup<Guid, ResourceClaim> _claimsByResource;
+
+        public Candidates(
+            IReadOnlyCollection<AvailabilityResource> resources,
+            IReadOnlyCollection<AvailabilityCombination> combinations,
+            IReadOnlyCollection<ResourceClaim> claims,
+            int partySize)
+        {
+            _resourcesById = resources.ToDictionary(r => r.Id);
+            _singles = resources.Where(r => r.MinCapacity <= partySize && partySize <= r.Capacity).ToList();
+            _combinations = combinations
+                .Where(c => c.MinCapacity <= partySize && partySize <= c.Capacity)
+                .Where(c => c.Members.Any(m => m.IsRequired) && c.Members.Where(m => m.IsRequired).All(m => _resourcesById.ContainsKey(m.ResourceId)))
+                .ToList();
+            _claimsByResource = claims.ToLookup(c => c.ResourceId);
+        }
+
+        public IReadOnlyList<AvailabilityOption> At(Instant start, Instant claimEnd)
+        {
+            bool IsFree(Guid resourceId) => !_claimsByResource[resourceId].Any(c => c.Start < claimEnd && c.End > start);
+
+            var options = new List<AvailabilityOption>();
+            options.AddRange(_singles
+                .Where(r => IsFree(r.Id))
+                .Select(r => new AvailabilityOption(AvailabilityOptionKind.Resource, r.Id, r.Name, r.Capacity, r.SortOrder, [r.Id])));
+
+            foreach (var combination in _combinations)
+            {
+                if (!combination.Members.Where(m => m.IsRequired).All(m => IsFree(m.ResourceId)))
+                {
+                    continue;
+                }
+
+                var allocated = combination.Members
+                    .Where(m => m.IsRequired || (_resourcesById.ContainsKey(m.ResourceId) && IsFree(m.ResourceId)))
+                    .Select(m => m.ResourceId)
+                    .ToList();
+                options.Add(new AvailabilityOption(AvailabilityOptionKind.Combination, combination.Id, combination.Name,
+                    combination.Capacity, combination.SortOrder, allocated));
+            }
+
+            return Rank(options);
+        }
     }
 
     /// <summary>Single resources before combinations, then smallest sufficient capacity, then sort order, then name.</summary>

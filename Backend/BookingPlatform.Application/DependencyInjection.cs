@@ -1,4 +1,6 @@
 using BookingPlatform.Application.Availability;
+using BookingPlatform.Application.Bookings;
+using BookingPlatform.Application.Common.Idempotency;
 using BookingPlatform.Application.Identity;
 using BookingPlatform.Application.Tenancy;
 using BookingPlatform.Application.Venues;
@@ -22,6 +24,11 @@ public static class DependencyInjection
         services.AddScoped<FloorPlanService>();
         services.AddScoped<ResourceCombinationService>();
         services.AddScoped<AvailabilityService>();
+        services.AddScoped<IdempotencyGuard>();
+        services.AddScoped<BookingAllocator>();
+        services.AddScoped<BookingService>();
+        services.AddScoped<HoldService>();
+        services.AddScoped<BlockService>();
 
         return services;
     }

@@ -85,35 +85,68 @@ public sealed class DbSession(NpgsqlDataSource dataSource) : IUnitOfWork, IAsync
     public Task RollbackToSavepointAsync(string name, CancellationToken cancellationToken) =>
         (_transaction ?? throw new InvalidOperationException("No active transaction.")).RollbackAsync(name, cancellationToken);
 
-    public async Task<T?> QuerySingleOrDefaultAsync<T>(string sql, object? parameters, CancellationToken cancellationToken)
+    public Task<T?> QuerySingleOrDefaultAsync<T>(string sql, object? parameters, CancellationToken cancellationToken) =>
+        Run(async () => await (await GetConnectionAsync(cancellationToken)).QuerySingleOrDefaultAsync<T>(Command(sql, parameters, cancellationToken)));
+
+    public Task<T> QuerySingleAsync<T>(string sql, object? parameters, CancellationToken cancellationToken) =>
+        Run(async () => await (await GetConnectionAsync(cancellationToken)).QuerySingleAsync<T>(Command(sql, parameters, cancellationToken)));
+
+    public Task<IReadOnlyList<T>> QueryAsync<T>(string sql, object? parameters, CancellationToken cancellationToken) =>
+        Run<IReadOnlyList<T>>(async () => (await (await GetConnectionAsync(cancellationToken)).QueryAsync<T>(Command(sql, parameters, cancellationToken))).AsList());
+
+    public Task<int> ExecuteAsync(string sql, object? parameters, CancellationToken cancellationToken) =>
+        Run(async () => await (await GetConnectionAsync(cancellationToken)).ExecuteAsync(Command(sql, parameters, cancellationToken)));
+
+    public Task<T?> ExecuteScalarAsync<T>(string sql, object? parameters, CancellationToken cancellationToken) =>
+        Run(async () => await (await GetConnectionAsync(cancellationToken)).ExecuteScalarAsync<T>(Command(sql, parameters, cancellationToken)));
+
+    /// <summary>
+    /// Runs a statement inside a savepoint. Returns false (rolled back to the savepoint, transaction still usable) when
+    /// <paramref name="isExpected"/> matches the failure, e.g. an exclusion-constraint violation.
+    /// </summary>
+    /// <remarks>
+    /// Two transactions inserting conflicting rows under an exclusion constraint can each wait for the other's
+    /// uncommitted row; PostgreSQL then aborts one with a deadlock. The statement is retried from the savepoint, where
+    /// it now waits for the surviving transaction and either succeeds or fails with the expected conflict.
+    /// </remarks>
+    public async Task<bool> TryExecuteAsync(string sql, object? parameters, Func<PostgresException, bool> isExpected, CancellationToken cancellationToken)
     {
-        var connection = await GetConnectionAsync(cancellationToken);
-        return await connection.QuerySingleOrDefaultAsync<T>(Command(sql, parameters, cancellationToken));
+        ArgumentNullException.ThrowIfNull(isExpected);
+        var transaction = _transaction ?? throw new InvalidOperationException("TryExecuteAsync requires an active transaction.");
+        const string savepoint = "try_execute";
+        const int maxAttempts = 5;
+        for (var attempt = 1; ; attempt++)
+        {
+            await transaction.SaveAsync(savepoint, cancellationToken);
+            try
+            {
+                await ExecuteAsync(sql, parameters, cancellationToken);
+                await transaction.ReleaseAsync(savepoint, cancellationToken);
+                return true;
+            }
+            catch (PostgresException ex) when (isExpected(ex))
+            {
+                await transaction.RollbackAsync(savepoint, cancellationToken);
+                return false;
+            }
+            catch (TransientDatabaseException ex) when (attempt < maxAttempts
+                && ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.DeadlockDetected })
+            {
+                await transaction.RollbackAsync(savepoint, cancellationToken);
+            }
+        }
     }
 
-    public async Task<T> QuerySingleAsync<T>(string sql, object? parameters, CancellationToken cancellationToken)
+    private static async Task<T> Run<T>(Func<Task<T>> action)
     {
-        var connection = await GetConnectionAsync(cancellationToken);
-        return await connection.QuerySingleAsync<T>(Command(sql, parameters, cancellationToken));
-    }
-
-    public async Task<IReadOnlyList<T>> QueryAsync<T>(string sql, object? parameters, CancellationToken cancellationToken)
-    {
-        var connection = await GetConnectionAsync(cancellationToken);
-        var rows = await connection.QueryAsync<T>(Command(sql, parameters, cancellationToken));
-        return rows.AsList();
-    }
-
-    public async Task<int> ExecuteAsync(string sql, object? parameters, CancellationToken cancellationToken)
-    {
-        var connection = await GetConnectionAsync(cancellationToken);
-        return await connection.ExecuteAsync(Command(sql, parameters, cancellationToken));
-    }
-
-    public async Task<T?> ExecuteScalarAsync<T>(string sql, object? parameters, CancellationToken cancellationToken)
-    {
-        var connection = await GetConnectionAsync(cancellationToken);
-        return await connection.ExecuteScalarAsync<T>(Command(sql, parameters, cancellationToken));
+        try
+        {
+            return await action();
+        }
+        catch (PostgresException ex) when (ex.SqlState is PostgresErrorCodes.DeadlockDetected or PostgresErrorCodes.SerializationFailure)
+        {
+            throw new TransientDatabaseException("The database reported a transient concurrency failure.", ex);
+        }
     }
 
     public async Task<SqlMapper.GridReader> QueryMultipleAsync(string sql, object? parameters, CancellationToken cancellationToken)
