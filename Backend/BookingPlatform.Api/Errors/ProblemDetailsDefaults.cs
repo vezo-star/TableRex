@@ -50,6 +50,9 @@ public static class ProblemDetailsDefaults
         { Status: StatusCodes.Status404NotFound } => ErrorCodes.NotFound,
         { Status: StatusCodes.Status405MethodNotAllowed } => ErrorCodes.MethodNotAllowed,
         { Status: StatusCodes.Status409Conflict } => ErrorCodes.Conflict,
+        { Status: StatusCodes.Status413PayloadTooLarge } => ErrorCodes.PayloadTooLarge,
+        { Status: StatusCodes.Status415UnsupportedMediaType } => ErrorCodes.BadRequest,
+        { Status: StatusCodes.Status422UnprocessableEntity } => ErrorCodes.BusinessRuleViolation,
         { Status: StatusCodes.Status429TooManyRequests } => ErrorCodes.RateLimited,
         _ => ErrorCodes.InternalError,
     };

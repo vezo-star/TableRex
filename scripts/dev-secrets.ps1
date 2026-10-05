@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Copies ConnectionStrings__* values from .env into .NET user-secrets shared by the Api, Worker and Migrations projects.
+    Copies secrets from .env into .NET user-secrets shared by the Api, Worker and Migrations projects.
 .DESCRIPTION
     Development only. Secrets stay outside the repository (in the user profile) and are loaded when the
     environment is Development.
@@ -21,19 +21,23 @@ if (-not (Test-Path $EnvFile)) {
 }
 
 $project = [System.IO.Path]::Combine($PSScriptRoot, '..', 'Backend', 'BookingPlatform.Api', 'BookingPlatform.Api.csproj')
-$keys = @('ConnectionStrings__Postgres', 'ConnectionStrings__Redis')
+$requiredKeys = @('ConnectionStrings__Postgres', 'ConnectionStrings__Redis', 'Jwt__SigningKey', 'DEV_ADMIN_PASSWORD')
+$optionalKeys = @('DEV_ADMIN_EMAIL')
 $values = @{}
 
 foreach ($line in Get-Content $EnvFile) {
     if ($line -match '^\s*#' -or $line -notmatch '=') { continue }
     $name, $value = $line -split '=', 2
-    if ($keys -contains $name.Trim()) { $values[$name.Trim()] = $value.Trim() }
+    $name = $name.Trim()
+    if ($requiredKeys -contains $name -or $optionalKeys -contains $name) { $values[$name] = $value.Trim() }
 }
 
-foreach ($key in $keys) {
-    if (-not $values.ContainsKey($key) -or $values[$key] -match 'CHANGE_ME') {
+foreach ($key in $requiredKeys + $optionalKeys) {
+    $missing = -not $values.ContainsKey($key) -or [string]::IsNullOrWhiteSpace($values[$key]) -or $values[$key] -match 'CHANGE_ME'
+    if ($missing -and $requiredKeys -contains $key) {
         throw "$key is missing or still contains CHANGE_ME in $EnvFile."
     }
+    if ($missing) { continue }
     $secretName = $key -replace '__', ':'
     dotnet user-secrets set $secretName $values[$key] --project $project | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "Failed to set user secret $secretName." }

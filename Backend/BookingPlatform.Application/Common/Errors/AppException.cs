@@ -14,6 +14,9 @@ public abstract class AppException : Exception
     }
 
     public string Code { get; }
+
+    /// <summary>Additional safe ProblemDetails members (for example conflicting resource ids on the staff API).</summary>
+    public IReadOnlyDictionary<string, object?> Extensions { get; init; } = new Dictionary<string, object?>();
 }
 
 public sealed class ValidationAppException : AppException
@@ -24,29 +27,35 @@ public sealed class ValidationAppException : AppException
         Errors = errors;
     }
 
+    public ValidationAppException(string field, string message)
+        : this(new Dictionary<string, string[]> { [field] = [message] })
+    {
+    }
+
     public IReadOnlyDictionary<string, string[]> Errors { get; }
 }
 
-public sealed class NotFoundAppException : AppException
-{
-    public NotFoundAppException(string code, string message)
-        : base(code, message)
-    {
-    }
-}
+/// <summary>400 for request-level problems that are not field validation (for example a missing header).</summary>
+public sealed class BadRequestAppException(string code, string message) : AppException(code, message);
 
-public sealed class ConflictAppException : AppException
-{
-    public ConflictAppException(string code, string message)
-        : base(code, message)
-    {
-    }
-}
+public sealed class UnauthorizedAppException(string code, string message) : AppException(code, message);
 
-public sealed class ForbiddenAppException : AppException
+public sealed class NotFoundAppException(string code, string message) : AppException(code, message);
+
+public sealed class ConflictAppException(string code, string message) : AppException(code, message);
+
+public sealed class ForbiddenAppException(string message = "You do not have permission to perform this action.")
+    : AppException(ErrorCodes.Forbidden, message);
+
+/// <summary>422: the request is well formed but breaks a business rule (operating hours, party size, ...).</summary>
+public sealed class BusinessRuleAppException(string code, string message) : AppException(code, message);
+
+public sealed class GoneAppException(string code, string message) : AppException(code, message);
+
+public sealed class LockedAppException(string code, string message) : AppException(code, message);
+
+public sealed class RateLimitedAppException(int retryAfterSeconds)
+    : AppException(ErrorCodes.RateLimited, "Too many requests. Please wait and try again.")
 {
-    public ForbiddenAppException(string message = "You do not have permission to perform this action.")
-        : base(ErrorCodes.Forbidden, message)
-    {
-    }
+    public int RetryAfterSeconds { get; } = retryAfterSeconds;
 }

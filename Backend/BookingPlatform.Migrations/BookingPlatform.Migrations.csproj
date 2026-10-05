@@ -11,6 +11,7 @@
     <!-- Pins the driver to the same version the Api and Worker use (dbup-postgresql alone resolves an older one). -->
     <PackageReference Include="Npgsql" />
     <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="Microsoft.Extensions.Identity.Core" />
     <PackageReference Include="Serilog.Extensions.Hosting" />
     <PackageReference Include="Serilog.Sinks.Console" />
     <PackageReference Include="Serilog.Formatting.Compact" />

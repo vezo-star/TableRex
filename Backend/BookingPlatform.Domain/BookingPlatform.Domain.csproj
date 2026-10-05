@@ -4,4 +4,8 @@
     <RootNamespace>BookingPlatform.Domain</RootNamespace>
   </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="NodaTime" />
+  </ItemGroup>
+
 </Project>

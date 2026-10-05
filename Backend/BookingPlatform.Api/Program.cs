@@ -2,15 +2,24 @@ using BookingPlatform.Api.Configuration;
 using BookingPlatform.Api.Errors;
 using BookingPlatform.Api.Health;
 using BookingPlatform.Api.Middleware;
+using BookingPlatform.Api.Security;
+using BookingPlatform.Application;
 using BookingPlatform.Infrastructure;
 using BookingPlatform.Infrastructure.Logging;
 using BookingPlatform.Migrations;
 using Microsoft.AspNetCore.Cors.Infrastructure;
+using Microsoft.AspNetCore.Mvc.ModelBinding.Metadata;
 using Microsoft.Extensions.Options;
 using Serilog;
 using Serilog.Events;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.AddServerHeader = false;
+    options.Limits.MaxRequestBodySize = 1 * 1024 * 1024;
+});
 
 builder.Services.AddSerilog(
     (services, logger) => logger
@@ -30,15 +39,22 @@ builder.Services.AddSingleton<IConfigureOptions<CorsOptions>, ConfigureCorsPolic
 builder.Services.AddProblemDetails(options => options.CustomizeProblemDetails = ProblemDetailsDefaults.Customize);
 builder.Services.AddExceptionHandler<AppExceptionHandler>();
 
-builder.Services.AddControllers();
+builder.Services
+    .AddControllers(options => options.ModelMetadataDetailsProviders.Add(new SystemTextJsonValidationMetadataProvider()))
+    .AddJsonOptions(options => options.JsonSerializerOptions.MaxDepth = 32);
 builder.Services.AddPlatformSwagger();
 
+builder.Services.AddPlatformForwardedHeaders(builder.Configuration);
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddTokenIssuing(builder.Configuration);
+builder.Services.AddApplication();
+builder.Services.AddPlatformAuthentication(builder.Configuration);
 builder.Services.AddPlatformHealthChecks();
 builder.Services.AddSingleton<MigrationRunner>();
 
 var app = builder.Build();
 
+app.UseForwardedHeaders();
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseSerilogRequestLogging(options =>
 {
@@ -66,6 +82,9 @@ if (SwaggerConfiguration.IsEnabled(app.Environment))
 }
 
 app.UseCors();
+app.UseAuthentication();
+app.UseMiddleware<TenantContextMiddleware>();
+app.UseAuthorization();
 
 app.MapPlatformHealthChecks();
 app.MapControllers();
@@ -82,3 +101,5 @@ if (app.Environment.IsDevelopment() && app.Configuration.GetValue<bool>("Databas
 }
 
 await app.RunAsync();
+
+public partial class Program;

@@ -6,6 +6,13 @@
       "environmentVariables": {
         "DOTNET_ENVIRONMENT": "Development"
       }
+    },
+    "seed-dev": {
+      "commandName": "Project",
+      "commandLineArgs": "seed-dev",
+      "environmentVariables": {
+        "DOTNET_ENVIRONMENT": "Development"
+      }
     }
   }
 }

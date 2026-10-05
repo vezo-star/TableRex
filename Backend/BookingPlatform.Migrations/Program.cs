@@ -12,13 +12,15 @@ const int ExitFailure = 1;
 const int ExitUsage = 2;
 
 var command = args.FirstOrDefault();
-if (command is not "migrate")
+if (command is not ("migrate" or "seed-dev"))
 {
     Console.Error.WriteLine("""
         Usage: BookingPlatform.Migrations <command>
 
         Commands:
           migrate    Apply pending migrations from database/migrations to ConnectionStrings:Postgres.
+          seed-dev   Apply migrations, then create idempotent demo data (refused when DOTNET_ENVIRONMENT=Production).
+                     Requires DEV_ADMIN_PASSWORD (min 12 characters); DEV_ADMIN_EMAIL defaults to admin@demo.local.
 
         Configuration: environment variables (ConnectionStrings__Postgres), command line
         (--ConnectionStrings:Postgres=...) and, when DOTNET_ENVIRONMENT=Development, .NET user-secrets.
@@ -54,9 +56,16 @@ builder.Services.AddSerilog(
     preserveStaticLogger: true);
 
 builder.Services.AddSingleton<MigrationRunner>();
+builder.Services.AddSingleton<DevSeeder>();
 
 using var host = builder.Build();
 var log = host.Services.GetRequiredService<ILogger<MigrationRunner>>();
+
+if (command == "seed-dev" && builder.Environment.IsProduction())
+{
+    log.LogError("seed-dev is refused in the Production environment.");
+    return ExitFailure;
+}
 
 var connectionString = builder.Configuration.GetConnectionString("Postgres");
 if (string.IsNullOrWhiteSpace(connectionString))
@@ -65,6 +74,44 @@ if (string.IsNullOrWhiteSpace(connectionString))
     return ExitFailure;
 }
 
+DevSeedOptions? seedOptions = null;
+if (command == "seed-dev")
+{
+    var password = builder.Configuration["DEV_ADMIN_PASSWORD"];
+    var email = builder.Configuration["DEV_ADMIN_EMAIL"] is { Length: > 0 } configured ? configured.Trim() : "admin@demo.local";
+    if (string.IsNullOrEmpty(password) || password.Length < 12)
+    {
+        log.LogError("DEV_ADMIN_PASSWORD must be set to at least 12 characters.");
+        return ExitFailure;
+    }
+
+    if (email.Count(c => c == '@') != 1 || email.StartsWith('@') || email.EndsWith('@'))
+    {
+        log.LogError("DEV_ADMIN_EMAIL is not a valid email address.");
+        return ExitFailure;
+    }
+
+    seedOptions = new DevSeedOptions(email, password);
+}
+
 log.LogInformation("Applying migrations ({Environment})", builder.Environment.EnvironmentName);
 var result = host.Services.GetRequiredService<MigrationRunner>().Run(connectionString);
-return result.Successful ? ExitSuccess : ExitFailure;
+if (!result.Successful)
+{
+    return ExitFailure;
+}
+
+if (seedOptions is not null)
+{
+    try
+    {
+        await host.Services.GetRequiredService<DevSeeder>().SeedAsync(connectionString, seedOptions, CancellationToken.None);
+    }
+    catch (Exception ex)
+    {
+        log.LogError(ex, "seed-dev failed");
+        return ExitFailure;
+    }
+}
+
+return ExitSuccess;
