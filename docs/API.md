@@ -1,6 +1,6 @@
 # API
 
-Status: **Phases 1–2 implemented** (health, auth, tenancy, staff); later sections are the planned surface. Each endpoint is marked with the phase that implements it. This document and Swagger must match the real implementation once built.
+Status: **Phases 1–5 implemented** (health, auth, tenancy, staff, venues, resources, availability, bookings, holds, blocks); later sections are the planned surface. Each endpoint is marked with the phase that implements it. This document and Swagger must match the real implementation once built.
 
 ## 1. Conventions
 
@@ -161,15 +161,21 @@ Resource rules: `code` unique per venue (409 `CODE_TAKEN`; type codes unique per
 
 Combination body: `{ venueId, name, minCapacity, capacity, members: [{ resourceId, isRequired }], isBookableOnline, sortOrder }` (PUT omits `venueId` and adds `isActive`). Rules: 2–20 distinct members, at least one required, every member a resource of the same venue (400 `members`); name unique per venue, case-insensitive (409 `CONFLICT`); `1 ≤ minCapacity ≤ capacity ≤ 1000`. Optional members are allocated only when free (D-043). DELETE deactivates instead when bookings reference the combination.
 
-### Availability, holds, blocks (Phase 4 implemented; holds/blocks Phase 5)
+### Availability, holds, blocks (Phase 4 / Phase 5 — implemented)
 
 | Method | Path | Permission |
 |---|---|---|
 | GET | `/api/v1/availability?venueId&date&partySize&durationMinutes&time&sectionId&resourceTypeId` | booking.view |
-| POST | `/api/v1/holds` | booking.create (Idempotency-Key) — Phase 5 |
-| DELETE | `/api/v1/holds/{id}` | booking.create — Phase 5 |
-| GET / POST | `/api/v1/resource-blocks?venueId&from&to` | resource.view / resource.update — Phase 5 |
-| POST | `/api/v1/resource-blocks/{id}/cancel` | resource.update — Phase 5 |
+| POST | `/api/v1/holds` | booking.create (Idempotency-Key) |
+| DELETE | `/api/v1/holds/{id}` | booking.create — releases an active hold; 204 (also when it already expired/converted/was released) |
+| GET | `/api/v1/resource-blocks?venueId&from&to&includeCancelled` | resource.view — blocks overlapping `[from, to)` (UTC instants) |
+| POST | `/api/v1/resource-blocks` | resource.update |
+| GET | `/api/v1/resource-blocks/{id}` | resource.view |
+| POST | `/api/v1/resource-blocks/{id}/cancel` | resource.update |
+
+Hold request: `{ venueId, date, time, durationMinutes?, partySize, allocation? }` (same allocation modes as bookings). Response 201 `{ id, venueId, status, partySize, startsAt, endsAt, expiresAt, resourceIds, token }`. The TTL is the venue's `holdTtlSeconds`. **`token` is returned only by the first response** — only its SHA-256 is stored, so an idempotent replay returns `token: null`. Pass the token as `holdToken` when creating the booking; the hold's resources are converted atomically (`allocation` must then be omitted or `AUTO`). An expired hold → 410 `HOLD_EXPIRED`; unknown token → 404 `HOLD_NOT_FOUND`.
+
+Block request: `{ venueId, resourceIds (1–50, same venue), startsAt, endsAt (UTC, ≤ 31 days), reason, notes? }`; `reason` ∈ MAINTENANCE, PRIVATE_EVENT, CLEANING, MANAGEMENT, UNAVAILABLE, STAFF_USE. Overlap with a booking, hold or block → 409 `RESOURCE_NOT_AVAILABLE` with `conflictingResourceIds`. Cancelling releases the resources immediately.
 
 Availability response (staff):
 
@@ -193,11 +199,11 @@ Availability response (staff):
 - Closed dates and inactive venues return `isClosed: true` with no slots. Slots that start before now are omitted. Options are ranked: single resources, smallest sufficient capacity, sort order (D-042).
 - Inaccessible venues return 404 `VENUE_NOT_FOUND` (D-018).
 
-### Bookings (Phase 5)
+### Bookings (Phase 5 — implemented)
 
 | Method | Path | Permission |
 |---|---|---|
-| GET | `/api/v1/bookings?venueId&date&from&to&status&source&customerId&resourceId&sectionId&q&page&pageSize` | booking.view |
+| GET | `/api/v1/bookings?venueId&date&from&to&status&source&customerId&resourceId&sectionId&q&page&pageSize` | booking.view — `status` may repeat or be comma-separated; `q` matches reference, customer name, email, phone; only accessible venues |
 | POST | `/api/v1/bookings` | booking.create (Idempotency-Key required) |
 | GET | `/api/v1/bookings/{id}` | booking.view |
 | PUT | `/api/v1/bookings/{id}` | booking.update (party size, notes, requests, customer; re-validates capacity) |
@@ -225,7 +231,19 @@ Create request:
 }
 ```
 
-`allocation.mode`: `AUTO` (best fit), `RESOURCES` (explicit ids), `COMBINATION` (`combinationId`). `customer` may instead contain new-customer details. Responses: 201 with booking; 409 `RESOURCE_NOT_AVAILABLE`; 422 rule violations.
+`allocation.mode`: `AUTO` (best fit, default), `RESOURCES` (explicit ids), `COMBINATION` (`combinationId`). `customer` may instead contain new-customer details `{ firstName, lastName?, email?, phone? }` — an existing customer with the same email is reused (D-049); `WALK_IN` bookings may omit `customer`. `source` ∈ STAFF (default), PHONE, WALK_IN; `status` ∈ CONFIRMED (default; SEATED for `WALK_IN`), PENDING, HELD, SEATED. `durationMinutes` defaults to the venue default.
+
+Responses: 201 with the booking (`Location` header); 400 validation; 404 `VENUE_NOT_FOUND` / `RESOURCE_NOT_FOUND` / `CUSTOMER_NOT_FOUND`; 409 `RESOURCE_NOT_AVAILABLE` (explicit allocations include `conflictingResourceIds`); 422 `OUTSIDE_OPERATING_HOURS` (must fit one operating period), `INVALID_BOOKING_TIME` (ends in the past), `PARTY_SIZE_NOT_SUPPORTED`.
+
+Booking response: `{ id, venueId, reference, status, source, partySize, startsAt, endsAt, businessDate, time, durationMinutes, timeZone, customer, resources: [{ resourceId, name, code, combinationId }], specialRequests, internalNotes, expiresAt, createdByUserId, version, confirmedAt, checkedInAt, seatedAt, completedAt, cancelledAt, noShowAt, cancellationReason, createdAt, updatedAt }`.
+
+Commands and updates accept an optional `version` in the body (or `If-Match: <version>`); a mismatch → 409 `CONCURRENCY_CONFLICT`. Transitions: confirm (PENDING/HELD → CONFIRMED), check-in (CONFIRMED → CHECKED_IN), seat (CONFIRMED/CHECKED_IN → SEATED), complete (SEATED → COMPLETED; frees the resource after turnover), no-show (CONFIRMED, only after the start → NO_SHOW), cancel (PENDING/HELD/CONFIRMED/CHECKED_IN → CANCELLED, `{ reason? }`). Anything else → 409 `INVALID_STATUS_TRANSITION`; cancelling twice → 409 `BOOKING_ALREADY_CANCELLED`.
+
+Move body: `{ date?, time?, durationMinutes?, allocation?, version? }` (at least one field; omitted values keep the current ones, and the current resources/combination are kept when `allocation` is omitted). Old and new allocation change in one transaction — on 409 the booking keeps its original slot.
+
+History: `{ bookingId, statusHistory: [{ fromStatus, toStatus, source, reason, changedByUserId, changedAt }], events: [{ eventType, data, actorUserId, occurredAt }] }`.
+
+Every write also records audit (no PII or notes) and outbox rows (REALTIME `BookingCreated`/`BookingUpdated`/`BookingMoved`/`BookingCancelled`/`BookingStatusChanged`, NOTIFICATION confirmation/cancellation) in the same transaction.
 
 ### Customers (Phase 6)
 

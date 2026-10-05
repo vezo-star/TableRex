@@ -113,6 +113,22 @@ Changing an Accepted decision requires the stop-and-explain process in `AGENTS.m
 
 **D-045 — Expired holds are ignored at read time.** Accepted. Availability treats `HOLD` allocations with `expires_at <= now` as free even if the sweeper has not yet deactivated them; the allocating transaction (Phase 5) deactivates them before inserting so the exclusion constraint never sees a stale hold as a conflict.
 
+**D-046 — Idempotency is scoped per caller and stores exact bytes.** Accepted. Scopes are `booking.create:user:{userId}` and `hold.create:user:{userId}` (public scopes per venue in Phase 8). The key row is the first write of the business transaction, so a failed operation leaves no key behind. `response_body` is `json`, not `jsonb`, and is serialised with MVC's settings, so a replay is byte-identical. Hold tokens are never stored in plain text, so a replayed hold returns `token: null`; the client must keep the token from the first response.
+
+**D-047 — Advisory locks queue allocation contention; the exclusion constraint still decides.** Accepted. Measured: with only savepoints, 10 concurrent AUTO requests for 3 tables yielded 1 booking — the inserters deadlocked on each other's uncommitted rows until retries ran out. Each allocating transaction now takes `pg_advisory_xact_lock` on all candidate resources in id order, once, before inserting. Same-resource writers serialise for a few milliseconds; different resources are unaffected. Hash collisions only add serialisation. Correctness never depends on the lock.
+
+**D-048 — AUTO allocation tries ranked options inside savepoints.** Accepted. Up to 20 options from `AvailabilityCalculator.OptionsAt` (same ranking as availability, D-042) are tried in order, each insert in a savepoint. No option can ever seat the party → 422 `PARTY_SIZE_NOT_SUPPORTED`; all fitting options taken → 409 `RESOURCE_NOT_AVAILABLE`. Explicit `RESOURCES`/`COMBINATION` requests yield exactly one candidate and return `conflictingResourceIds` on 409.
+
+**D-049 — Staff create reuses a customer by email.** Accepted. `customer.customerId` selects an existing customer; otherwise new details are matched tenant-wide by email (case-insensitive) and the existing record is reused instead of creating a duplicate; with no email (or no match) a new customer is created. `WALK_IN` bookings may omit the customer.
+
+**D-050 — Staff bookings stay inside one operating period and cannot end in the past.** Accepted. A start/end that does not fit one period of the business date (including its overnight period) → 422 `OUTSIDE_OPERATING_HOURS`; ending before now → 422 `INVALID_BOOKING_TIME`. Public limits (lead time, advance days, max party) are not applied to staff (DOMAIN_MODEL §5). Out-of-hours staff bookings remain a deferred product question.
+
+**D-051 — Complete truncates, no-show waits for the start.** Accepted. `complete` keeps the allocation active but truncates it to `max(now + turnover, start + 1 min)` so the table frees up early without breaking the range check. `no-show` before the start time → 409 `INVALID_STATUS_TRANSITION`. Cancel and no-show deactivate allocations.
+
+**D-052 — Outbox payloads carry identifiers only.** Accepted. REALTIME messages carry `{ eventId, type, venueId, entityId, version, businessDate, occurredAt }`; NOTIFICATION messages carry the booking id and notification type, and the Phase 9 dispatcher loads current data at send time. No PII, notes or tokens in the outbox. `BookingConfirmation` is queued only when the booking has a customer and is CONFIRMED or PENDING.
+
+**D-053 — Housekeeping runs in the Worker on fixed intervals.** Accepted. The hold sweep (every 30 s, batches of 500, `FOR UPDATE SKIP LOCKED`) deactivates expired hold allocations, marks the holds EXPIRED and queues `HoldExpired`. An hourly purge deletes expired idempotency keys, refresh tokens 30 days past their family expiry, and PROCESSED outbox rows older than 30 days. DEAD outbox rows are kept for review.
+
 ## Risk register
 
 | # | Risk | Impact | Mitigation |

@@ -1,6 +1,6 @@
 # Database
 
-Status: **Phases 1–4 implemented (V001–V020, V023, V027); later tables are the proposed design.** SQL below is illustrative; the migrations are the source of truth once written, and this document is updated to match them.
+Status: **Phases 1–5 implemented (V001–V027).** SQL below is illustrative; the migrations are the source of truth once written, and this document is updated to match them.
 
 ## 1. Platform
 
@@ -17,7 +17,7 @@ Status: **Phases 1–4 implemented (V001–V020, V023, V027); later tables are t
 - **Immutable once merged** to main. Corrections are new migrations.
 - Execution: `dotnet run --project Backend/BookingPlatform.Migrations --launch-profile migrate -- migrate` locally, or the `migrator` image (`docker run --rm -e ConnectionStrings__Postgres=... bookingplatform/migrator`). Exit codes: 0 success (including "nothing to apply"), 1 failure or missing connection string, 2 unknown command. The Api may auto-migrate only in Development when `Database__AutoMigrate=true`. Production runs the migrator as an explicit deployment step/job.
 - Script names are validated (`V###__lower_snake.sql`, unique version numbers) by a unit test, so a misnamed file fails CI rather than being silently skipped.
-- Implemented: **V001__extensions** (Phase 1); **V002–V005, V023, V027** (Phase 2); **V006–V013** (Phase 3); **V014–V020** (Phase 4).
+- Implemented: **V001__extensions** (Phase 1); **V002–V005, V023, V027** (Phase 2); **V006–V013** (Phase 3); **V014–V020** (Phase 4); **V021, V022, V024–V026** (Phase 5).
 - Dev data: `--launch-profile seed-dev` (C# seeder, idempotent; runs migrations first; creates Demo Hospitality and Demo Coworking, the dev admin as platform admin + owner of both, and manager/host/staff/viewer users in Demo Hospitality; all passwords come from `DEV_ADMIN_PASSWORD`; refuses when `DOTNET_ENVIRONMENT=Production`). Phase 3 adds Demo Restaurant and Demo Club (Demo Hospitality) and Demo Workspace (Demo Coworking) with sections, resource types, resources, weekly hours and a floor plan each; a venue's contents are only seeded when the venue itself is created, so edits made in the app survive re-runs. Phase 4 adds a "Tables 4 + 5" combination to a newly created Demo Restaurant.
 - Out-of-order numbers: DbUp applies every script missing from the journal, sorted by name, so a database that already has V027 still receives V006–V022 later. Consequently a lower-numbered migration added later must not depend on data or objects from a higher-numbered one that was applied earlier, and vice versa.
 
@@ -49,6 +49,15 @@ Status: **Phases 1–4 implemented (V001–V020, V023, V027); later tables are t
 - `resource_combinations` + `resource_combination_members(is_required)`: unique `(venue_id, name)`; members reference resources of the same venue; members cascade with the combination; combinations referenced by bookings are deactivated, not deleted.
 - `resource_blocks`: reason enum (MAINTENANCE, PRIVATE_EVENT, CLEANING, MANAGEMENT, UNAVAILABLE, STAFF_USE); `CANCELLED ⇔ cancelled_at`.
 - Verified by `AllocationConstraintTests`: overlapping and contained ranges → 23P01; adjacent, inactive and other-resource rows accepted; reactivating an overlapping row → 23P01; a second concurrent transaction waits for the first and then fails with 23P01.
+
+### Phase 5 schema notes
+
+- `booking_status_history`: `from_status` (null for the initial status), `to_status`, `source` STAFF/PUBLIC/SYSTEM, `reason` ≤500, `changed_by_user_id`; composite FK to `bookings (tenant_id, venue_id, id)`; index `(booking_id, changed_at)`.
+- `booking_events`: `event_type` CREATED/UPDATED/MOVED/STATUS_CHANGED/CANCELLED/NOTE_ADDED, `data jsonb` object (changed fields only — never customer PII or internal notes), `actor_user_id`; index `(booking_id, occurred_at)`.
+- `outbox_messages`: `tenant_id` nullable (platform messages); destination REALTIME/NOTIFICATION; status PENDING/PROCESSING/PROCESSED/FAILED/DEAD with `PROCESSED ⇔ processed_at`; partial pending index `(destination, available_at) WHERE status IN ('PENDING','FAILED')`, plus `(locked_until)` and `(processed_at)` for lease recovery and purges.
+- `idempotency_keys`: `request_hash` 32 bytes; status IN_PROGRESS/COMPLETED (COMPLETED requires `response_status`); **`response_body json`** (not `jsonb`, which reorders keys) so a replay is byte-identical; index on `expires_at`.
+- V026: trigram GIN on `bookings.reference`, `bookings (tenant_id, venue_id, business_date, status)`, `booking_resources (tenant_id, resource_id, booking_id)`, active-blocks and active-holds-by-owner partial indexes, `bookings (tenant_id, customer_id, starts_at DESC)`.
+- Verified by `BookingTests`, `ConcurrencyTests` and `HousekeepingTests` (TESTING.md §4–5).
 
 ### Planned sequence and phase
 
@@ -148,7 +157,8 @@ CREATE TABLE booking_allocations (
 - **Partial constraint `WHERE (is_active)`** — cancelled bookings, no-shows, released/converted/expired holds and cancelled blocks are kept for history with `is_active = false` and no longer participate. Historical records never block legitimate new bookings.
 - **Turnover buffer** — the allocation's `ends_at` = booking end + venue `turnover_buffer_minutes`. The booking row keeps the customer-facing end time.
 - **Concurrency** — when two transactions insert conflicting rows, PostgreSQL makes the second wait for the first to commit or roll back, then raises `23P01 exclusion_violation` (or succeeds if the first rolled back). This holds under READ COMMITTED, across any number of Api instances, without application locks.
-- **Combinations** — all member allocations are inserted in the same transaction; one conflict aborts the whole transaction, so a combination is never partially allocated. Inserts are ordered by `resource_id` to reduce deadlock likelihood; `40P01` is retried once, then returned as 409.
+- **Combinations** — all member allocations are inserted in one statement (ordered by `resource_id`) inside a savepoint; a conflict rolls back the savepoint, so a combination is never partially allocated.
+- **Contention** — conflicting inserters under an exclusion constraint can wait on each other's uncommitted rows and deadlock (measured: 10 concurrent auto-assign requests for 3 tables produced only 1 booking before this was addressed). Before inserting, the allocating transaction therefore takes `pg_advisory_xact_lock(class, hashtext(resource_id))` for **every candidate resource, in id order, once per transaction** (D-047). Claimants for the same resources queue instead of deadlocking; locks are released at commit/rollback. This is an optimisation only — the exclusion constraint remains the arbiter (a hash collision merely serialises more). A residual `40P01` on the insert is retried from the savepoint (up to 5 times); a `40P01`/`40001` elsewhere retries the whole transaction once, then 409.
 
 ### 4.3 Expired holds
 
@@ -187,7 +197,7 @@ Allocations are never deleted by application code.
 |---|---|---|
 | 23P01 exclusion_violation on `ex_booking_allocations_no_overlap` | Resource taken | 409 `RESOURCE_NOT_AVAILABLE` (+ conflicting resource ids on staff API) |
 | 23505 unique_violation on idempotency key | Concurrent duplicate | Resolved by idempotency flow (§6) |
-| 40P01 deadlock_detected | Lock cycle | Retry once, then 409 `RESOURCE_NOT_AVAILABLE` |
+| 40P01 deadlock_detected / 40001 serialization_failure | Lock cycle | Insert: retried from the savepoint; elsewhere: transaction retried once, then 409 `RESOURCE_NOT_AVAILABLE` |
 | 23503 / 23514 | FK / check violation | 500 (indicates a validation gap — logged as error) |
 
 Conflicting resource ids are determined by a follow-up overlap query after rollback (constraint error detail is not parsed for business data).
@@ -226,13 +236,15 @@ Cascade policy: `ON DELETE RESTRICT` by default (business entities are deactivat
 ## 6. Idempotency
 
 ```
-idempotency_keys(id, tenant_id, scope, key, request_hash, status, response_status, response_body jsonb,
+idempotency_keys(id, tenant_id, scope, key, request_hash, status, response_status, response_body json,
                  resource_id, created_at, expires_at)
 UNIQUE (tenant_id, scope, key)
 ```
 
 - `scope` = operation + caller (e.g. `booking.create:user:{userId}` or `booking.create:public:{venueId}`), so keys from different callers never collide.
-- `request_hash` = SHA-256 of method + route + canonical JSON body.
+- `request_hash` = SHA-256 of `"METHOD route\n"` + the request body re-serialised from the bound request with the API's JSON options (so whitespace and property order do not matter).
+- An expired row for the same key is deleted before the insert, so keys can be reused after retention.
+- Stored responses are written with the same serializer settings as MVC (relaxed encoder), so replays are byte-identical. Hold responses are stored **without the token** (only its hash exists server-side); a replayed hold returns `token: null`.
 - Flow (inside the booking transaction, as the first statement): `INSERT ... ON CONFLICT DO NOTHING RETURNING id`.
   - Inserted → proceed; on success store `response_status`/`response_body`, `status = 'COMPLETED'`, commit with the booking.
   - Conflict → a concurrent duplicate blocks on the unique index until the first transaction finishes; then read the row: same hash + completed → return stored response (`Idempotent-Replayed: true` header); different hash → 409 `IDEMPOTENCY_CONFLICT`.

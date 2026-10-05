@@ -14,7 +14,7 @@ The next phase starts only after the explicit instruction **"PROCEED TO NEXT PHA
 | 2 | Authentication & Multi-tenancy | **Complete** (2026-10-05) |
 | 3 | Venues & Resources | **Complete** (2026-10-05) |
 | 4 | Availability Engine | **Complete** (2026-10-05) |
-| 5 | Core Booking Engine | Not started |
+| 5 | Core Booking Engine | **Complete** (2026-10-05) |
 | 6 | Internal Staff Experience | Not started |
 | 7 | Real-time | Not started |
 | 8 | Public Booking | Not started |
@@ -98,6 +98,13 @@ Completion notes (2026-10-05):
 Build: migrations V021, V022, V024, V025, V026; `BookingService` (create, update, move, cancel, confirm, check-in, seat, complete, no-show), holds (create/release/convert), blocks (create/cancel), idempotency, unit of work, status machine enforcement, history/events/audit/outbox writes, 23P01 → 409 mapping, auto-assignment with savepoints, optimistic concurrency, booking reference sequence; expired-hold sweeper in Worker.
 
 Acceptance: **all concurrency tests pass** (100-parallel single resource, combinations, overlap, adjacency, auto-assign, move vs create); database prevents overlapping allocations; idempotency tests pass; no partial bookings; no race-condition workaround replaces database protection.
+
+Completion notes (2026-10-05):
+- Verified: Release build with 0 warnings; 220 backend tests green (140 unit — 36 new: status machine transitions, timing resolution incl. overnight/turnover/duration limits/closed days, reference format, hold tokens, phone normalisation; 80 integration — 15 new). `BookingTests` (9): create side effects (history, event, audit without PII, both outbox rows), idempotent replay byte-identical + `IDEMPOTENCY_CONFLICT` + missing/too-long key + 10 concurrent same-key requests → one booking, explicit conflicts with `conflictingResourceIds`, AUTO + combination + party-size errors, the full status machine incl. versions/`If-Match`/no-show-before-start/complete truncation, update + move (conflict keeps the original slot), holds (convert, expired hold ignored, release, replay without token), blocks, tenant isolation + venue scoping + VIEW_ONLY permissions. `ConcurrencyTests` (5): 100 requests → exactly 1 booking; 50 combination + 50 member requests → 1 success, no partial combination; overlapping windows → 1, adjacent windows → all; 10 AUTO requests for 3 tables → exactly 3 on distinct tables; move vs create × 5 rounds. `HousekeepingTests` (1): sweep + purges. Booking invariants (no overlapping active allocations, no active allocation on a cancelled/no-show booking, every active booking allocated) asserted after each.
+- Migrations V021, V022, V024–V026 applied to the Compose database. API smoke test (throwaway admin) against Demo Restaurant: AUTO booking → 201 `BK-…` on Table 1; same key → 201 `Idempotent-Replayed: true` with an identical body; history; cancel → version 2; cancel again → 409 `BOOKING_ALREADY_CANCELLED`; unauthenticated → 401; outbox holds `BookingCreated`, `BookingConfirmation`, `BookingCancelled`, `BookingCancellation`.
+- Fixed during verification: `jsonb` reordered keys in stored responses (now `json`); stored responses escaped `+` differently from MVC (serializer now mirrors MVC's relaxed encoder); concurrent AUTO requests deadlocked on each other's uncommitted rows under the exclusion constraint and only 1 of 3 tables was booked — fixed with ordered advisory locks per candidate resource (D-047) plus savepoint retry on `40P01`.
+- Decisions: D-046 – D-053.
+- Not built (moved): the booking UI is Phase 6; outbox dispatchers are Phases 7 and 9 (rows accumulate as PENDING until then).
 
 ## Phase 6 — Internal Staff Experience
 

@@ -97,7 +97,7 @@ SELECT count(*) FROM booking_allocations al JOIN bookings bk ON bk.id = al.booki
 -- every booking has resources and allocations; booking count = success count
 ```
 
-The Npgsql pool size in tests is raised so the database — not the pool — is the contention point. Constraints are never weakened to make these pass.
+The Npgsql pool size in tests is raised (`MaxPoolSize=150`, container `max_connections=400`) so the database — not the pool — is the contention point. Constraints are never weakened to make these pass. Implemented in `Bookings/ConcurrencyTests.cs` (scenarios 1–6; the move-vs-create race runs 5 rounds) with `BookingInvariants` checked after each; `BookingTests` cover the booking-engine and idempotency lists in §4, and `HousekeepingTests` the hold sweep and purges.
 
 ## 6. SignalR tests (Phase 7)
 
