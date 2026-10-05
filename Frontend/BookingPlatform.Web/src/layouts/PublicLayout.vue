@@ -2,7 +2,8 @@
   <q-layout view="hHh lpR fFf">
     <q-header bordered class="bg-white text-dark">
       <q-toolbar>
-        <q-toolbar-title>Book a table</q-toolbar-title>
+        <q-icon name="event_available" color="primary" size="sm" class="q-mr-sm" />
+        <q-toolbar-title class="text-subtitle1">Online booking</q-toolbar-title>
       </q-toolbar>
     </q-header>
 

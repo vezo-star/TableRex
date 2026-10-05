@@ -146,6 +146,25 @@ const routes = [
   },
 
   {
+    path: '/',
+    component: () => import('@/layouts/PublicLayout.vue'),
+    meta: { public: true },
+    children: [
+      {
+        path: 'book/:tenantSlug/:venueSlug',
+        name: RouteNames.PUBLIC_BOOKING,
+        component: () => import('@/pages/public/PublicBookingPage.vue'),
+        props: true,
+      },
+      {
+        path: 'booking/manage',
+        name: RouteNames.PUBLIC_MANAGE_BOOKING,
+        component: () => import('@/pages/public/ManageBookingPage.vue'),
+      },
+    ],
+  },
+
+  {
     path: '/:catchAll(.*)*',
     name: RouteNames.NOT_FOUND,
     component: () => import('@/pages/ErrorNotFound.vue'),

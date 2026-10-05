@@ -24,7 +24,30 @@
     />
     <div v-else-if="!venue" class="flex flex-center q-pa-xl"><q-spinner size="lg" /></div>
 
-    <q-card v-else flat bordered>
+    <q-banner
+      v-if="venue && publicUrl"
+      dense
+      rounded
+      class="bg-blue-1 q-mb-md"
+      data-test="public-booking-link"
+    >
+      <template #avatar><q-icon name="public" color="primary" /></template>
+      <template v-if="publicBookingOpen">
+        Guests book online at
+        <a :href="publicUrl" target="_blank" rel="noopener" class="text-weight-medium">{{
+          publicUrl
+        }}</a>
+      </template>
+      <template v-else>
+        Online booking is off for this venue. Turn on "Accept online bookings" and set the venue to
+        ACTIVE to share {{ publicUrl }}.
+      </template>
+      <template v-if="publicBookingOpen" #action>
+        <q-btn flat dense no-caps color="primary" icon="content_copy" label="Copy" @click="copy" />
+      </template>
+    </q-banner>
+
+    <q-card v-if="venue" flat bordered>
       <q-tabs v-model="tab" align="left" dense active-color="primary" indicator-color="primary">
         <q-tab name="details" label="Details" />
         <q-tab name="sections" label="Sections" />
@@ -57,7 +80,7 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { useQuasar } from 'quasar'
+import { copyToClipboard, useQuasar } from 'quasar'
 import ErrorState from '@/components/common/ErrorState.vue'
 import VenueForm from '@/components/venues/VenueForm.vue'
 import SectionsPanel from '@/components/venues/SectionsPanel.vue'
@@ -82,6 +105,25 @@ const canManage = computed(() => auth.hasPermission(Permissions.VENUE_MANAGE))
 const venue = ref(null)
 const loadError = ref(null)
 const tab = ref('details')
+
+const publicUrl = computed(() => {
+  const tenantSlug = auth.currentTenant?.tenantSlug
+  return tenantSlug && venue.value
+    ? `${window.location.origin}/book/${tenantSlug}/${venue.value.slug}`
+    : null
+})
+const publicBookingOpen = computed(
+  () => venue.value?.status === 'ACTIVE' && venue.value?.rules?.publicBookingEnabled !== false,
+)
+
+async function copy() {
+  try {
+    await copyToClipboard(publicUrl.value)
+    $q.notify?.({ type: 'positive', message: 'Link copied.' })
+  } catch {
+    $q.notify?.({ type: 'warning', message: 'Copy failed.' })
+  }
+}
 
 async function load() {
   loadError.value = null

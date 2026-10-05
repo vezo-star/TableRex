@@ -175,8 +175,15 @@
           :error-message="ruleError(field.key)"
         />
         <q-toggle
+          v-model="form.rules.publicBookingEnabled"
+          class="col-12 col-sm-6"
+          label="Accept online bookings"
+          :disable="readonly"
+          data-test="public-booking-toggle"
+        />
+        <q-toggle
           v-model="form.rules.autoConfirmPublicBookings"
-          class="col-12"
+          class="col-12 col-sm-6"
           label="Auto-confirm public bookings"
           :disable="readonly"
         />
@@ -226,6 +233,8 @@ const DEFAULT_RULES = Object.freeze({
   maxAdvanceDays: 90,
   holdTtlSeconds: 300,
   autoConfirmPublicBookings: true,
+  publicBookingEnabled: true,
+  publicCancellationCutoffMinutes: 120,
 })
 
 const numberFields = [
@@ -238,6 +247,7 @@ const numberFields = [
   { key: 'minLeadTimeMinutes', label: 'Min lead time (min)' },
   { key: 'maxAdvanceDays', label: 'Book ahead (days)' },
   { key: 'holdTtlSeconds', label: 'Hold time (sec)' },
+  { key: 'publicCancellationCutoffMinutes', label: 'Online cancel cutoff (min)' },
 ]
 
 const isCreate = computed(() => !props.venue)

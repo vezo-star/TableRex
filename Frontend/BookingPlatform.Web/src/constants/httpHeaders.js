@@ -2,4 +2,5 @@ export const HttpHeaders = Object.freeze({
   CORRELATION_ID: 'X-Correlation-Id',
   IDEMPOTENCY_KEY: 'Idempotency-Key',
   IF_MATCH: 'If-Match',
+  BOOKING_TOKEN: 'X-Booking-Token',
 })

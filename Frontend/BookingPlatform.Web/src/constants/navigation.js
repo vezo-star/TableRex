@@ -20,6 +20,8 @@ export const RouteNames = Object.freeze({
   SETTINGS: 'settings',
   PLATFORM_TENANTS: 'platform-tenants',
   SYSTEM_STATUS: 'system-status',
+  PUBLIC_BOOKING: 'public-booking',
+  PUBLIC_MANAGE_BOOKING: 'public-manage-booking',
   NOT_FOUND: 'not-found',
 })
 
