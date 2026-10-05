@@ -180,7 +180,9 @@ import BookingListView from '@/components/bookings/BookingListView.vue'
 import BookingTimeline from '@/components/bookings/BookingTimeline.vue'
 import ErrorState from '@/components/common/ErrorState.vue'
 import NoVenueState from '@/components/venues/NoVenueState.vue'
+import { useRealtimeRefresh } from '@/composables/useRealtimeRefresh.js'
 import { Permissions } from '@/constants/permissions.js'
+import { BOOKING_EVENTS, RealtimeEvents } from '@/constants/realtimeEvents.js'
 import { blockService, bookingService } from '@/services/bookingService.js'
 import { venueService } from '@/services/venueService.js'
 import { useAuthStore } from '@/stores/auth.js'
@@ -291,14 +293,23 @@ async function loadVenueData() {
   const queryDate =
     typeof route.query.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(route.query.date)
   date.value = queryDate ? route.query.date : today.value
+  await loadResources()
+}
+
+async function loadResources() {
+  const id = venueId.value
+  if (!id) {
+    return
+  }
   try {
     const [venueResources, venueSections, venuePlans] = await Promise.all([
-      venueService.listAllResources(venueId.value),
-      venueService.listSections(venueId.value),
-      can(Permissions.FLOORPLAN_VIEW)
-        ? venueService.listFloorPlans(venueId.value)
-        : Promise.resolve([]),
+      venueService.listAllResources(id),
+      venueService.listSections(id),
+      can(Permissions.FLOORPLAN_VIEW) ? venueService.listFloorPlans(id) : Promise.resolve([]),
     ])
+    if (id !== venueId.value) {
+      return
+    }
     resources.value = venueResources
     sections.value = venueSections
     plans.value = venuePlans
@@ -412,10 +423,47 @@ watch([date, view], () => {
   }
 })
 
+/** Refetch when an event concerns the shown day (or a booking already on it, e.g. moved to another day). */
+function concernsBoard(event) {
+  if (
+    event.type === RealtimeEvents.RESOURCE_UPDATED ||
+    event.type === RealtimeEvents.FLOOR_PLAN_UPDATED
+  ) {
+    return true
+  }
+  if (!BOOKING_EVENTS.includes(event.type) && event.type !== RealtimeEvents.RESOURCE_BLOCKED) {
+    return false
+  }
+  return (
+    !event.businessDate ||
+    event.businessDate === date.value ||
+    Boolean(board.value?.bookings.some((b) => b.id === event.entityId))
+  )
+}
+
+const { live } = useRealtimeRefresh(
+  (events) => {
+    const all = events.some((e) => e.type === 'resync')
+    if (
+      all ||
+      events.some(
+        (e) =>
+          e.type === RealtimeEvents.RESOURCE_UPDATED ||
+          e.type === RealtimeEvents.FLOOR_PLAN_UPDATED,
+      )
+    ) {
+      loadResources()
+    }
+    load({ silent: true })
+  },
+  { filter: concernsBoard },
+)
+
+// Polling is only a fallback while live updates are unavailable.
 let timer = null
 onMounted(() => {
   timer = setInterval(() => {
-    if (!document.hidden && !drawerOpen.value && !createOpen.value) {
+    if (!live.value && !document.hidden && !drawerOpen.value && !createOpen.value) {
       load({ silent: true })
     }
   }, REFRESH_MS)

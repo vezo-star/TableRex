@@ -107,8 +107,10 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import BookingStatusChip from '@/components/bookings/BookingStatusChip.vue'
 import ErrorState from '@/components/common/ErrorState.vue'
 import NoVenueState from '@/components/venues/NoVenueState.vue'
+import { useRealtimeRefresh } from '@/composables/useRealtimeRefresh.js'
 import { RouteNames } from '@/constants/navigation.js'
 import { Permissions, RoleLabels } from '@/constants/permissions.js'
+import { BOOKING_EVENTS } from '@/constants/realtimeEvents.js'
 import { bookingService } from '@/services/bookingService.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useVenuesStore } from '@/stores/venues.js'
@@ -148,12 +150,12 @@ function isLate(booking) {
   return new Date(booking.startsAt).getTime() < now.value
 }
 
-async function load() {
+async function load({ silent = false } = {}) {
   if (!canViewBookings.value || !venue.value) {
     board.value = null
     return
   }
-  loading.value = true
+  loading.value = !silent
   try {
     board.value = await bookingService.board(venue.value.id, today.value)
     now.value = Date.now()
@@ -206,13 +208,25 @@ const cards = computed(() =>
   allCards.filter((c) => !c.permission || auth.hasPermission(c.permission)),
 )
 
-watch(() => venue.value?.id, load, { immediate: true })
+watch(
+  () => venue.value?.id,
+  () => load(),
+  { immediate: true },
+)
 
+const { live } = useRealtimeRefresh(() => load({ silent: true }), {
+  filter: (event) =>
+    BOOKING_EVENTS.includes(event.type) &&
+    (!event.businessDate || event.businessDate === today.value),
+})
+
+// Keeps "upcoming" current; refetches only while live updates are unavailable.
 let timer = null
 onMounted(() => {
   timer = setInterval(() => {
-    if (!document.hidden) {
-      load()
+    now.value = Date.now()
+    if (!live.value && !document.hidden) {
+      load({ silent: true })
     }
   }, 60_000)
 })

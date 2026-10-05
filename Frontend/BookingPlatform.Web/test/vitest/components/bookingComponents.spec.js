@@ -3,6 +3,7 @@ import { flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { mountWithQuasar } from '../helpers/mountWithQuasar.js'
 import { useAuthStore } from '@/stores/auth.js'
+import { useRealtimeStore } from '@/stores/realtime.js'
 
 vi.mock('@/services/availabilityService.js', () => ({ availabilityService: { search: vi.fn() } }))
 vi.mock('@/services/bookingService.js', () => ({
@@ -283,6 +284,47 @@ describe('BookingDrawer', () => {
       allocation: { mode: 'RESOURCES', resourceIds: ['r2'] },
       version: 3,
     })
+  })
+
+  it('reloads on newer remote changes but never discards an edit in progress', async () => {
+    vi.useFakeTimers()
+    try {
+      bookingService.get
+        .mockResolvedValueOnce(booking())
+        .mockResolvedValueOnce(booking({ partySize: 4, version: 4 }))
+        .mockResolvedValueOnce(booking({ partySize: 6, version: 5 }))
+      const wrapper = await open()
+      const vm = wrapper.vm
+      const realtime = useRealtimeStore()
+      realtime.venueId = 'v1'
+      const remote = async (eventId, version, entityId = 'b1') => {
+        realtime.receive('BookingUpdated', { eventId, venueId: 'v1', entityId, version })
+        await vi.advanceTimersByTimeAsync(400)
+        await flushPromises()
+      }
+
+      await remote('e1', 3)
+      await remote('e2', 9, 'other')
+      expect(bookingService.get).toHaveBeenCalledTimes(1)
+
+      await remote('e3', 4)
+      expect(bookingService.get).toHaveBeenCalledTimes(2)
+      expect(vm.booking.partySize).toBe(4)
+
+      vm.startEdit()
+      await remote('e4', 5)
+      expect(bookingService.get).toHaveBeenCalledTimes(2)
+      expect(vm.remoteChange).toBe(true)
+      expect(document.querySelector('[data-test="drawer-remote-change"]')).not.toBeNull()
+
+      vm.discardAndReload()
+      await flushPromises()
+      expect(vm.mode).toBe('view')
+      expect(vm.booking.version).toBe(5)
+      expect(vm.remoteChange).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
 

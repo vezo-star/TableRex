@@ -4,6 +4,7 @@ import { flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createTestRouter, mountWithQuasar } from '../helpers/mountWithQuasar.js'
 import { useAuthStore } from '@/stores/auth.js'
+import { useRealtimeStore } from '@/stores/realtime.js'
 import { useVenuesStore } from '@/stores/venues.js'
 
 vi.mock('@/services/venueService.js', () => ({
@@ -125,6 +126,42 @@ describe('BookingBoardPage', () => {
     wrapper.findComponent(BookingBoardPage).vm.view = 'floor'
     await flushPromises()
     expect(wrapper.find('[data-test="floor-empty"]').exists()).toBe(true)
+  })
+
+  it('refetches when realtime events concern the shown day and after a resync', async () => {
+    const pinia = setup(['booking.view'])
+    const realtime = useRealtimeStore(pinia)
+    realtime.venueId = 'v1'
+    const router = createTestRouter([{ path: '/bookings', name: 'bookings', component: Host }])
+    await mountWithQuasar(Host, { pinia, router, initialPath: '/bookings?date=2026-10-09' })
+    await flushPromises()
+    const settle = async () => {
+      await new Promise((resolve) => setTimeout(resolve, 350))
+      await flushPromises()
+    }
+    bookingService.board.mockClear()
+    venueService.listAllResources.mockClear()
+
+    realtime.receive('BookingCreated', { eventId: 'e1', venueId: 'v1', businessDate: '2026-10-10' })
+    realtime.receive('HoldCreated', { eventId: 'e2', venueId: 'v1', businessDate: '2026-10-09' })
+    await settle()
+    expect(bookingService.board).not.toHaveBeenCalled()
+
+    realtime.receive('BookingMoved', {
+      eventId: 'e3',
+      venueId: 'v1',
+      entityId: 'b1',
+      businessDate: '2026-10-12',
+    })
+    await settle()
+    expect(bookingService.board).toHaveBeenCalledTimes(1)
+    expect(venueService.listAllResources).not.toHaveBeenCalled()
+
+    realtime.receive('BookingCreated', { eventId: 'e4', venueId: 'v1', businessDate: '2026-10-09' })
+    realtime.resync()
+    await settle()
+    expect(bookingService.board).toHaveBeenCalledTimes(2)
+    expect(venueService.listAllResources).toHaveBeenCalledOnce()
   })
 
   it('hides creation for view-only users', async () => {

@@ -19,6 +19,19 @@
       </q-card-section>
       <q-separator />
 
+      <q-banner
+        v-if="remoteChange"
+        dense
+        class="bg-amber-1 text-body2"
+        data-test="drawer-remote-change"
+      >
+        This booking was changed elsewhere. Reload to see the latest version (unsaved changes here
+        are discarded).
+        <template #action>
+          <q-btn flat dense no-caps color="primary" label="Reload" @click="discardAndReload" />
+        </template>
+      </q-banner>
+
       <div v-if="loadError" class="q-pa-md">
         <ErrorState
           :message="loadError.message"
@@ -295,6 +308,7 @@ import BookingStatusChip from '@/components/bookings/BookingStatusChip.vue'
 import ErrorState from '@/components/common/ErrorState.vue'
 import { ErrorCodes } from '@/constants/errorCodes.js'
 import { RouteNames } from '@/constants/navigation.js'
+import { useRealtimeRefresh } from '@/composables/useRealtimeRefresh.js'
 import { Permissions } from '@/constants/permissions.js'
 import { bookingService } from '@/services/bookingService.js'
 import { useAuthStore } from '@/stores/auth.js'
@@ -335,6 +349,7 @@ const saving = ref(false)
 const actionError = ref(null)
 const history = ref(null)
 const historyLoading = ref(false)
+const remoteChange = ref(false)
 
 const editForm = reactive({ partySize: 1, specialRequests: '', internalNotes: '' })
 const moveForm = reactive({ date: '', time: '', durationMinutes: null, resourceIds: [] })
@@ -595,6 +610,7 @@ watch(
       tab.value = 'details'
       mode.value = 'view'
       actionError.value = null
+      remoteChange.value = false
       load()
     }
   },
@@ -606,6 +622,41 @@ watch(tab, (value) => {
     loadHistory()
   }
 })
+
+async function refreshFromServer() {
+  remoteChange.value = false
+  history.value = null
+  await load()
+  if (tab.value === 'history') {
+    loadHistory()
+  }
+}
+
+function discardAndReload() {
+  mode.value = 'view'
+  actionError.value = null
+  refreshFromServer()
+}
+
+// Another user (or tab) changed the open booking: reload, unless that would discard an edit in progress.
+useRealtimeRefresh(
+  () => {
+    if (!props.modelValue || !booking.value) {
+      return
+    }
+    if (mode.value !== 'view' || busy.value || saving.value) {
+      remoteChange.value = true
+      return
+    }
+    refreshFromServer()
+  },
+  {
+    filter: (event) =>
+      props.modelValue &&
+      event.entityId === props.bookingId &&
+      (event.version == null || !booking.value || event.version > booking.value.version),
+  },
+)
 
 defineExpose({ reload: load })
 </script>

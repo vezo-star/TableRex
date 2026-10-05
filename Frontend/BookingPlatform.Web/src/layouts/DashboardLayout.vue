@@ -15,6 +15,7 @@
         <q-toolbar-title>Booking Platform</q-toolbar-title>
 
         <template v-if="auth.isAuthenticated">
+          <RealtimeIndicator v-if="auth.hasTenant" />
           <VenueSwitcher v-if="auth.hasTenant" />
           <q-btn-dropdown
             v-if="auth.memberships.length > 1"
@@ -92,22 +93,46 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useQuasar } from 'quasar'
+import RealtimeIndicator from '@/components/common/RealtimeIndicator.vue'
 import VenueSwitcher from '@/components/venues/VenueSwitcher.vue'
 import { dashboardNavigation, RouteNames, visibleNavigation } from '@/constants/navigation.js'
 import { useAuthStore } from '@/stores/auth.js'
+import { useRealtimeStore } from '@/stores/realtime.js'
+import { useVenuesStore } from '@/stores/venues.js'
 import { normaliseError } from '@/utils/problemDetails.js'
 
 defineOptions({ name: 'DashboardLayout' })
 
 const auth = useAuthStore()
+const venues = useVenuesStore()
+const realtime = useRealtimeStore()
 const router = useRouter()
 const $q = useQuasar()
 const drawerOpen = ref(false)
 
 const navigation = computed(() => visibleNavigation(dashboardNavigation, auth))
+
+// One connection per signed-in tenant session: a tenant switch issues a new token, so reconnect.
+watch(
+  () => (auth.isAuthenticated && auth.hasTenant ? auth.tenantId : null),
+  (tenantId) => (tenantId ? realtime.restart() : realtime.stop()),
+  { immediate: true },
+)
+watch(
+  () => venues.currentVenueId,
+  (venueId) => realtime.setVenue(venueId),
+  { immediate: true },
+)
+
+const onVisibility = () => realtime.visibilityChanged(document.hidden)
+onMounted(() => document.addEventListener('visibilitychange', onVisibility))
+onBeforeUnmount(() => {
+  document.removeEventListener('visibilitychange', onVisibility)
+  realtime.stop()
+})
 
 async function switchTenant(tenantId) {
   if (tenantId === auth.tenantId) {
