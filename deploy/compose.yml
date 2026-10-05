@@ -9,7 +9,9 @@
 # strings at them. TLS terminates in front of `proxy` (or in it); PUBLIC_BASE_URL must then be the https origin.
 name: bookingplatform-stack
 
-x-postgres: &postgres-connection "Host=postgres;Port=5432;Database=${POSTGRES_DB:-bookingplatform};Username=${POSTGRES_USER:-bookingplatform};Password=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}"
+# The migrator connects as the owner; the Api and Worker as the least-privilege role it provisions (APP_DB_USER).
+x-postgres-owner: &postgres-owner-connection "Host=postgres;Port=5432;Database=${POSTGRES_DB:-bookingplatform};Username=${POSTGRES_USER:-bookingplatform};Password=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}"
+x-postgres: &postgres-connection "Host=postgres;Port=5432;Database=${POSTGRES_DB:-bookingplatform};Username=${APP_DB_USER:-bookingplatform_app};Password=${APP_DB_PASSWORD:?Set APP_DB_PASSWORD}"
 x-redis: &redis-connection "redis:6379,password=${REDIS_PASSWORD:?Set REDIS_PASSWORD},abortConnect=false"
 
 services:
@@ -50,7 +52,9 @@ services:
     restart: "no"
     environment:
       DOTNET_ENVIRONMENT: Production
-      ConnectionStrings__Postgres: *postgres-connection
+      ConnectionStrings__Postgres: *postgres-owner-connection
+      APP_DB_USER: ${APP_DB_USER:-bookingplatform_app}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?Set APP_DB_PASSWORD}
       PLATFORM_ADMIN_EMAIL: ${PLATFORM_ADMIN_EMAIL:-}
       PLATFORM_ADMIN_PASSWORD: ${PLATFORM_ADMIN_PASSWORD:-}
       PLATFORM_ADMIN_NAME: ${PLATFORM_ADMIN_NAME:-}
@@ -120,7 +124,8 @@ services:
     restart: unless-stopped
 
   proxy:
-    image: nginx:alpine
+    # 1.27.3+ is required for "resolve" in proxy.conf upstreams.
+    image: nginx:1.31-alpine
     restart: unless-stopped
     volumes:
       - ./proxy.conf:/etc/nginx/conf.d/default.conf:ro
