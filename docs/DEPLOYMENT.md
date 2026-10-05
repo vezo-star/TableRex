@@ -25,8 +25,12 @@ Status: **Phase 1 — local development and container images implemented.** Prod
 | `Database__AutoMigrate` | Api | Development only; `false` by default |
 | `LogFormat` | Api, Worker | `json` (default, compact JSON) or `text` (Development) |
 | `VITE_API_BASE_URL` | Web build | API base path baked into the SPA (default `/api`); never put secrets in `VITE_*` |
-
-Added in later phases: `Jwt__*` (Phase 2), `DEV_ADMIN_EMAIL` / `DEV_ADMIN_PASSWORD` (dev seeder, Phase 2).
+| `Jwt__SigningKey` | Api | **Required secret.** ≥32 random bytes (base64); startup fails if missing, short or a placeholder. Rotating it signs everyone out of their access tokens (refresh cookies keep working). |
+| `Jwt__Issuer`, `Jwt__Audience`, `Jwt__AccessTokenMinutes` | Api | Defaults `booking-platform`, `booking-platform-web`, `15` (1–60) |
+| `Auth__RefreshTokenDays`, `Auth__RefreshTokenAbsoluteDays`, `Auth__LockoutThreshold`, `Auth__LockoutBaseMinutes`, `Auth__LockoutMaxMinutes` | Api | Session and lockout tuning (defaults 14, 30, 5, 1, 60) |
+| `ReverseProxy__TrustedNetworks__N` | Api | CIDRs of the reverse proxies whose `X-Forwarded-For/Proto` are trusted (e.g. `10.0.0.0/8`). Empty = only loopback. Required behind a proxy, otherwise rate limits key on the proxy IP. |
+| `RateLimiting__KeyPrefix` | Api | Redis key prefix for rate-limit counters (default `rl`); set per environment when sharing one Redis |
+| `DEV_ADMIN_EMAIL`, `DEV_ADMIN_PASSWORD` | Migrations `seed-dev` | Development only; password ≥12 chars. `seed-dev` refuses to run when `DOTNET_ENVIRONMENT=Production`. |
 
 PostgreSQL connections default to `GSS Encryption Mode=Disable` unless the connection string sets it: the platform uses password authentication, and the .NET runtime images do not ship the Kerberos library that Npgsql otherwise probes for.
 

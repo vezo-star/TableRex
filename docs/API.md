@@ -1,6 +1,6 @@
 # API
 
-Status: **Phase 0 — planned surface.** Each endpoint is marked with the phase that implements it. This document and Swagger must match the real implementation once built.
+Status: **Phases 1–2 implemented** (health, auth, tenancy, staff); later sections are the planned surface. Each endpoint is marked with the phase that implements it. This document and Swagger must match the real implementation once built.
 
 ## 1. Conventions
 
@@ -78,32 +78,47 @@ Cross-tenant access returns **404** (not 403) so existence of other tenants' rec
 | GET | `/health/ready` | PostgreSQL + Redis |
 | GET | `/swagger` | Development/Test only by default |
 
-### Auth (Phase 2)
+### Auth (Phase 2 — implemented)
 
 | Method | Path | Permission | Notes |
 |---|---|---|---|
-| POST | `/api/v1/auth/login` | anonymous, rate-limited | Returns access token + memberships; sets refresh cookie. Token is tenant-scoped if the user has exactly one active membership, otherwise the client must call switch-tenant. |
-| POST | `/api/v1/auth/refresh` | refresh cookie | Rotates refresh token; reuse of a rotated token revokes the family. |
-| POST | `/api/v1/auth/logout` | authenticated | Revokes current refresh token family; clears cookie. |
-| GET | `/api/v1/auth/me` | authenticated | User, current tenant, permissions, accessible venues. |
-| POST | `/api/v1/auth/switch-tenant` | authenticated | `{ tenantId }` → server verifies active membership → new tokens. (Selecting is allowed; trusting without verification is not.) |
-| POST | `/api/v1/auth/change-password` | authenticated | Revokes other sessions. |
+| POST | `/api/v1/auth/login` | anonymous; 20/min per IP + 10 per 5 min per account | `{ email, password }`. Returns access token + memberships; sets the refresh cookie. Token is tenant-scoped if the user has exactly one active membership, otherwise `requiresTenantSelection: true` and the client calls switch-tenant. Wrong email and wrong password both return 401 `INVALID_CREDENTIALS`; a locked account returns 423 `ACCOUNT_LOCKED` with `retryAfterSeconds`. |
+| POST | `/api/v1/auth/refresh` | refresh cookie; 60/min per IP; Origin checked | Rotates the refresh token; reuse of a rotated token revokes the whole family (401). |
+| POST | `/api/v1/auth/logout` | refresh cookie (anonymous allowed); Origin checked | Revokes the current refresh-token family and clears the cookie. Always 204. |
+| GET | `/api/v1/auth/me` | authenticated | User, current tenant, roles, permissions, memberships, `accessibleVenueIds`, `hasAllVenueAccess`. `accessibleVenueIds` is `[]` until Phase 3 adds venues. |
+| POST | `/api/v1/auth/switch-tenant` | authenticated; Origin checked | `{ tenantId }` → server verifies an active membership in an active tenant → new access + refresh token (old family revoked). Not a member (or tenant inactive) → 404 `TENANT_NOT_FOUND`, so tenant ids cannot be probed. |
+| POST | `/api/v1/auth/change-password` | authenticated; Origin checked; 10 per 15 min per user | `{ currentPassword, newPassword }`. Revokes every refresh token for the user and issues a new session. |
+
+Auth responses carry `Cache-Control: no-store`. Access token: JWT HS256, 15 min, claims `sub`, `tid` (optional), `jti`, `iss`, `aud` — permissions are **not** in the token; they are resolved per request. Refresh cookie: `bp_refresh`, HttpOnly, Secure, SameSite=Strict, Path=`/api/v1/auth`, 14-day sliding / 30-day absolute.
+
+Auth response:
+
+```json
+{
+  "accessToken": "…", "expiresAt": "2026-10-05T15:45:00Z", "userId": "…", "tenantId": null,
+  "requiresTenantSelection": true,
+  "memberships": [{ "tenantId": "…", "tenantName": "Demo Hospitality", "tenantSlug": "demo-hospitality", "roles": ["TENANT_OWNER"] }]
+}
+```
 
 Password reset / email verification: Phase 9 (needs notifications).
 
-### Tenancy & staff (Phase 2)
+### Tenancy & staff (Phase 2 — implemented)
 
 | Method | Path | Permission |
 |---|---|---|
-| GET | `/api/v1/tenants/current` | any member |
-| PUT | `/api/v1/tenants/current` | settings.manage |
-| GET | `/api/v1/staff` | staff.view |
-| POST | `/api/v1/staff` | staff.manage (create/invite membership) |
+| GET | `/api/v1/tenants/current` | any member (tenant selected) |
+| PUT | `/api/v1/tenants/current` | settings.manage (`{ name, defaultTimeZone }`; slug is immutable; audited) |
+| GET | `/api/v1/staff?status&q&page&pageSize` | staff.view (`q` matches name or email) |
+| POST | `/api/v1/staff` | staff.manage — `{ email, displayName, password?, roles[] }`; creates the account (password required) or adds a membership for an existing account. 201 `{ staff, accountCreated }`; 409 if already a member. |
 | GET | `/api/v1/staff/{tenantUserId}` | staff.view |
-| PUT | `/api/v1/staff/{tenantUserId}/roles` | staff.manage (audited; cannot remove last owner) |
-| POST | `/api/v1/staff/{tenantUserId}/deactivate` | staff.manage |
-| GET | `/api/v1/roles` | staff.view |
-| GET/POST | `/api/v1/platform/tenants` | platform admin only |
+| PUT | `/api/v1/staff/{tenantUserId}/roles` | staff.manage — audited; 422 `LAST_OWNER` when removing the last owner; only owners may grant or remove `TENANT_OWNER` (403) |
+| POST | `/api/v1/staff/{tenantUserId}/deactivate` | staff.manage — revokes that user's sessions for the tenant; cannot deactivate yourself or the last owner (422) |
+| POST | `/api/v1/staff/{tenantUserId}/activate` | staff.manage |
+| GET | `/api/v1/roles` | staff.view — system roles with their permissions |
+| GET / POST | `/api/v1/platform/tenants` | platform admin only — list tenants; create a tenant with its first owner (`{ name, slug, defaultTimeZone, owner: { email, displayName, password? } }`) |
+
+Permission failures: 401 `UNAUTHORIZED` (no/invalid token), 403 `TENANT_SELECTION_REQUIRED` (tenant endpoint without `tid`), 403 `FORBIDDEN` (missing permission, or a `tid` the user is not an active member of).
 
 ### Venues (Phase 3)
 

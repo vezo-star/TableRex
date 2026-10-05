@@ -1,13 +1,13 @@
 # Security
 
-Status: **Phase 0 — design.** Security is a first-class feature; each phase's acceptance criteria include its security checks.
+Status: **Authentication, tenant context and authorization implemented (Phase 2).** Security is a first-class feature; each phase's acceptance criteria include its security checks. §12 records the concrete Phase 2 parameters and known limitations.
 
 ## 1. Authentication
 
 | Item | Design |
 |---|---|
 | Passwords | `PasswordHasher<T>` from `Microsoft.Extensions.Identity.Core` (PBKDF2-HMAC-SHA512, iteration count raised to ≥210,000). Used standalone — no ASP.NET Identity stores, no EF. Rehash on login when parameters change. |
-| Password policy | Min 12 chars, no forced composition rules, block top common passwords list. |
+| Password policy | Min 12 chars (max 128), no forced composition rules, block top common passwords list. |
 | Access token | JWT, HMAC-SHA256 (key ≥256 bits from secret store), 15 min lifetime. Claims: `sub` (user id), `tid` (tenant id, only after membership verification), `jti`, `iat`, `exp`, `iss`, `aud`. **No permissions in the token** — resolved server-side so changes apply immediately. Clock skew 30 s. |
 | Refresh token | 256-bit random, stored as SHA-256 hash in `refresh_tokens`, 14-day lifetime (sliding by rotation, absolute max 30 days). Rotated on every use; reuse of a rotated token revokes the whole family (theft detection). Bound to user + tenant. |
 | Token transport (SPA) | Access token in memory only. Refresh token in cookie: `HttpOnly; Secure; SameSite=Strict; Path=/api/v1/auth`. |
@@ -114,3 +114,27 @@ Audited actions include: login success/failure (security log), booking create/mo
 
 - Payment webhooks (Phase 10): signature verification per provider, idempotent processing keyed by provider event id, audit trail, replay window checks.
 - External API clients: per-tenant API keys (hashed, scoped, revocable, rate-limited) — later phase.
+
+## 12. Phase 2 implementation notes
+
+| Control | Implemented value |
+|---|---|
+| Password hashing | `PasswordHasher<object>` IdentityV3, 210,000 iterations; rehash on login when the stored hash uses weaker parameters. |
+| Password policy | 12–128 chars, ≥4 distinct characters, not in the bundled common-password list, must not contain the email local part (when ≥4 chars). |
+| Lockout | 5 consecutive failures → lock for 1 min × 2^(n−5), capped at 60 min. Locked accounts get 423 `ACCOUNT_LOCKED` + `retryAfterSeconds`. Failed attempts are committed even though the request fails. |
+| Unknown user | A dummy hash verification runs so response timing does not reveal whether the account exists. |
+| Rate limits | Login 20/min per IP and 10 per 5 min per account (key = SHA-256 of the normalised email, so no PII is stored in Redis); refresh 60/min per IP; change-password 10 per 15 min per user. Redis fixed-window counters (`INCR` + `PEXPIRE` Lua script) with an in-memory per-instance fallback when Redis is down. Key prefix configurable via `RateLimiting__KeyPrefix`. |
+| JWT validation | HS256 only, issuer + audience + lifetime validated, clock skew 30 s, `MapInboundClaims=false`. The signing key must be ≥32 bytes and not a placeholder — startup fails otherwise. `access_token` query string is accepted only on `/hubs/*` (SignalR). |
+| Refresh tokens | 256-bit random, base64url, stored only as SHA-256 (`bytea`, 32 bytes). Rotated on every refresh; presenting a rotated token revokes the whole family (`REUSE_DETECTED`) and is audited. Expired families are purged in batches. |
+| Origin check | `refresh`, `logout`, `switch-tenant` and `change-password` reject requests whose `Origin` is neither in `Cors:AllowedOrigins` nor the API's own host. Requests without `Origin` (non-browser clients) are allowed — the cookie is SameSite=Strict, so browsers cannot send it cross-site anyway. |
+| Tenant context | `TenantContextMiddleware` runs after authentication: user flags (active / platform admin) and the membership for `tid` are cached in memory for 60 s (negative results 10 s) and invalidated on role / status changes **on the instance that made the change**. Inactive user → 401; `tid` without an active membership in an active tenant → 403. |
+| Role changes | Applied on the next request (permissions are never in the token). Deactivating a member revokes their refresh tokens for that tenant. Only owners may grant or remove `TENANT_OWNER`; the last active owner cannot be demoted or deactivated (serialised with `SELECT … FOR UPDATE` on the tenant row). Users cannot deactivate themselves. |
+| Audit | Login success/failure, lockout, logout, tenant switch, refresh reuse, password change, tenant settings, staff creation, role changes and (de)activation write `audit_logs` (append-only trigger). Sensitive keys (`password`, `token`, `secret`, `hash`, …) are recursively redacted to `[REDACTED]`. |
+| Forwarded headers | `X-Forwarded-For/Proto` are honoured only from `ReverseProxy__TrustedNetworks` (CIDR list) so clients cannot spoof their IP for rate limiting. |
+| Request limits | Kestrel body limit 1 MB (413 `PAYLOAD_TOO_LARGE`), JSON max depth 32, user agent stored truncated to 512 chars. |
+
+Known limitations (accepted, revisit in Phase 12):
+
+- **Cross-instance cache staleness.** With several API instances, a role change or deactivation is visible immediately on the instance that handled it but may take up to 60 s on others (the membership cache TTL). Refresh tokens are revoked immediately in PostgreSQL, so a deactivated user cannot obtain new access tokens; an existing access token may keep working on another instance for at most 60 s. A Redis pub/sub invalidation can remove this window if needed.
+- **Account enumeration via lockout.** 423 `ACCOUNT_LOCKED` is only returned for existing accounts, so an attacker who triggers 5 failures can learn that an email exists. Accepted because the UX benefit (telling a real user why they cannot sign in) outweighs it; the per-account and per-IP rate limits bound the probing rate.
+- **Access token lifetime.** A stolen access token stays valid until it expires (≤15 min); there is no access-token deny-list. Membership/user-status checks on every request limit the impact.

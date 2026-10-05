@@ -80,6 +80,21 @@ Changing an Accepted decision requires the stop-and-explain process in `AGENTS.m
 
 **D-032 — Structured console logging switch.** Accepted. `LogFormat` (`json` | `text`) selects compact JSON (default, containers) or a readable text template (Development). Serilog is registered with `preserveStaticLogger: true`, so no global static logger exists; request logging uses the DI logger.
 
+## Phase 2 implementation decisions (2026-10-05)
+
+**D-033 — BCL date/time types in persistence; NodaTime in Domain only (amends D-003).** Accepted.
+- Context: D-003 planned `Npgsql.NodaTime` so NodaTime types flow through Dapper. Dapper does not use Npgsql's type-mapping plugin for parameters or materialisation, so each NodaTime type would still need a custom Dapper handler, and the plugin changes global data-source behaviour.
+- Decision: rows use `DateTime` (UTC, `timestamptz`), `DateOnly` (`date`) and `TimeOnly` (`time`) with small Dapper handlers (`DapperConfiguration`). Domain code (`TimeZones`, later operating-hours/availability calculators) converts to NodaTime at the boundary. `Npgsql.NodaTime` is not added.
+- Consequences: one fewer package; SQL parameters are plain BCL types; conversions are explicit in the services that do venue-local maths.
+
+**D-034 — Cross-tab refresh serialisation with the Web Locks API.** Accepted. Refresh tokens rotate on every use, so two tabs refreshing at once would present the same token twice and trip reuse detection (revoking the session). The SPA takes a `navigator.locks` lock (`bp-auth-refresh`) around refresh and re-reads state after acquiring it; logout and tenant switches are broadcast on `BroadcastChannel('bp-auth')`. Falls back to in-tab single-flight where Web Locks is unavailable.
+
+**D-035 — Only owners manage the owner role.** Accepted. `staff.manage` (OWNER and ADMIN) allows role changes, but granting or removing `TENANT_OWNER` requires the caller to be an owner (403 otherwise), so an admin cannot escalate to owner or remove an owner. The last active owner cannot be demoted or deactivated (422 `LAST_OWNER`); the check locks the tenant row (`SELECT … FOR UPDATE`) to serialise concurrent changes.
+
+**D-036 — Per-request authorization from the database, short in-process cache.** Accepted (implements D-010). Permissions are never in the JWT. `TenantContextMiddleware` loads user flags and the membership's roles/permissions via `IMembershipRepository`, cached in `IMemoryCache` for 60 s (10 s for negative results) and invalidated locally on role/status changes. Cross-instance staleness is bounded by the TTL (documented in `SECURITY.md` §12). A Redis-backed invalidation channel can be added later without API changes.
+
+**D-037 — Application-level rate limiter on Redis.** Accepted. ASP.NET Core's built-in rate limiter is per-process; limits must hold across instances, so `IRateLimiter` uses a Redis fixed window (Lua `INCR` + `PEXPIRE`) and falls back to an in-memory window when Redis is unavailable (availability over strictness for auth endpoints). No new package.
+
 ## Risk register
 
 | # | Risk | Impact | Mitigation |

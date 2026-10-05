@@ -11,7 +11,7 @@ The next phase starts only after the explicit instruction **"PROCEED TO NEXT PHA
 |---|---|---|
 | 0 | Discovery & Architecture | **Approved** (2026-10-05) — D-002 .NET 10, D-014 AwesomeAssertions, D-018 venue-scoped access |
 | 1 | Foundation | **Complete** (2026-10-05) |
-| 2 | Authentication & Multi-tenancy | Not started |
+| 2 | Authentication & Multi-tenancy | **Complete** (2026-10-05) |
 | 3 | Venues & Resources | Not started |
 | 4 | Availability Engine | Not started |
 | 5 | Core Booking Engine | Not started |
@@ -59,6 +59,14 @@ Completion notes (2026-10-05):
 Build: migrations V002–V005, V023 (audit), V027 (roles/permissions reference data); users, refresh tokens, tenants, memberships, roles, permissions; login/refresh/logout/me/switch-tenant/change-password; JWT + refresh rotation with reuse detection; password hashing; lockout; `ITenantContext` + middleware; permission policies; `IVenueAccessGuard` skeleton; staff/membership endpoints; platform tenant endpoints; dev seeder (Demo Hospitality tenant + dev admin from `DEV_ADMIN_PASSWORD`); login rate limiting; frontend login page, `auth` + `tenant` stores, route guards, tenant switcher.
 
 Acceptance: login/refresh/logout/me work; tenant resolution works; permission checks work; tenant isolation tests (users, memberships, staff endpoints) pass; secrets only from configuration.
+
+Completion notes (2026-10-05):
+- Verified: Release build with 0 warnings; 62 unit tests, 46 integration tests (Testcontainers), 70 Vitest tests; ESLint + Prettier clean; production SPA build. Integration suites cover login/cookie attributes, generic credential errors, progressive lockout, refresh rotation and reuse detection (family revoked + audited), hash-only token storage, logout (revocation + audit), Origin check, multi-tenant selection and switching, change password, disabled users, rate limiting, cross-tenant 404, forged `tid` → 403, the full role → permission matrix against real endpoints, last-owner protection, admin cannot grant owner, immediate effect of role changes and deactivation, and platform-admin-only tenant administration.
+- Migrations V002–V005, V023, V027 applied to the Compose database; `seed-dev` is idempotent.
+- Browser smoke test against the running Api + dev server: login → workspace selection → dashboard; staff list; tenant settings; tenant switcher (Manager role hides Settings, direct `/settings` → forbidden page); session survives full page reloads via the refresh cookie; logout revokes the session; wrong password shows a generic error; a single-tenant Host skips workspace selection and is denied `/staff`.
+- Fixed during verification: a stale `?redirect=` from a previous session could send the next user straight to a forbidden page — login now only follows redirects the signed-in user may open, and the redirect survives workspace selection. Logout was not audited — added. The per-account login rate-limit key now hashes the email.
+- Not built (moved): `IVenueAccessGuard` lands in Phase 3 with venues; `/me.accessibleVenueIds` is `[]` until then. A separate `tenant` store was not needed — the tenant lives in the `auth` store with the session.
+- Known limitations: see `SECURITY.md` §12 (cross-instance cache staleness ≤60 s, lockout reveals account existence, no access-token deny-list).
 
 ## Phase 3 — Venues & Resources
 
@@ -128,7 +136,9 @@ Full review against the checklist in the master specification §67 Phase 12 and 
 | Availability caching | Only if measured need | Correctness first; avoid premature optimisation |
 | External API keys for server-to-server integrations | Post-Phase 8 | Public API first |
 | Row-Level Security | Phase 12 evaluation | Defense in depth on top of tested tenant scoping |
-| `http.js` auth header and single-flight refresh interceptors | Phase 2 | Needs the auth endpoints and `auth` store |
-| `Migrations seed-dev` command | Phase 2 | Needs tenants/users tables (D-016) |
+| ~~`http.js` auth header and single-flight refresh interceptors~~ | Done in Phase 2 | |
+| ~~`Migrations seed-dev` command~~ | Done in Phase 2 | |
+| `IVenueAccessGuard` and `/me.accessibleVenueIds` | Phase 3 | Needs venues and `tenant_user_venues` |
+| Password reset / email verification | Phase 9 | Needs notifications |
 | SignalR JS client (`realtimeService`) | Phase 7 | Realtime phase |
 | CI `package` stage (build and push images) | Phase 12 | Needs a registry and hosting decision; images are build-verified locally |

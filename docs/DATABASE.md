@@ -1,6 +1,6 @@
 # Database
 
-Status: **Phase 0 — proposed design.** SQL below is illustrative; the migrations are the source of truth once written, and this document is updated to match them.
+Status: **Phases 1–2 implemented (V001–V005, V023, V027); later tables are the proposed design.** SQL below is illustrative; the migrations are the source of truth once written, and this document is updated to match them.
 
 ## 1. Platform
 
@@ -17,8 +17,18 @@ Status: **Phase 0 — proposed design.** SQL below is illustrative; the migratio
 - **Immutable once merged** to main. Corrections are new migrations.
 - Execution: `dotnet run --project Backend/BookingPlatform.Migrations --launch-profile migrate -- migrate` locally, or the `migrator` image (`docker run --rm -e ConnectionStrings__Postgres=... bookingplatform/migrator`). Exit codes: 0 success (including "nothing to apply"), 1 failure or missing connection string, 2 unknown command. The Api may auto-migrate only in Development when `Database__AutoMigrate=true`. Production runs the migrator as an explicit deployment step/job.
 - Script names are validated (`V###__lower_snake.sql`, unique version numbers) by a unit test, so a misnamed file fails CI rather than being silently skipped.
-- Implemented: **V001__extensions** (Phase 1).
-- Dev data: `-- seed-dev` (C# seeder; hashes the dev admin password from `DEV_ADMIN_PASSWORD`; refuses when `DOTNET_ENVIRONMENT=Production`).
+- Implemented: **V001__extensions** (Phase 1); **V002–V005, V023, V027** (Phase 2).
+- Dev data: `--launch-profile seed-dev` (C# seeder, idempotent; runs migrations first; creates Demo Hospitality and Demo Coworking, the dev admin as platform admin + owner of both, and manager/host/staff/viewer users in Demo Hospitality; all passwords come from `DEV_ADMIN_PASSWORD`; refuses when `DOTNET_ENVIRONMENT=Production`).
+- Out-of-order numbers: DbUp applies every script missing from the journal, sorted by name, so a database that already has V027 still receives V006–V022 later. Consequently a lower-numbered migration added later must not depend on data or objects from a higher-numbered one that was applied earlier, and vice versa.
+
+### Phase 2 schema notes
+
+- `tenants.slug` is unique, lower-case `[a-z0-9-]`, ≤63 chars, immutable via the API; `status` ACTIVE / SUSPENDED / ARCHIVED; `default_time_zone` IANA id (validated in the application with NodaTime).
+- `users.email` is `citext` and unique (queries compare `@email::citext`); `status` ACTIVE / LOCKED / DISABLED; lockout columns `failed_login_count`, `lockout_until`.
+- `refresh_tokens.token_hash` is `bytea` with `CHECK (octet_length = 32)` and unique; `family_id` groups a rotation chain; `replaced_by_id` self-FK is `ON DELETE SET NULL` so batch purges never hit the self-reference; `revoked_at` and `revoked_reason` are both null or both set.
+- `tenant_users` is unique on `(tenant_id, user_id)` and exposes `(tenant_id, id)` for composite FKs; `tenant_user_roles` references it via `(tenant_id, tenant_user_id)` so a role assignment can never point at another tenant's membership.
+- `roles.tenant_id` is null for system roles (partial unique indexes for system vs tenant role codes); `permissions.code` is the PK with format `area.action`.
+- `audit_logs` is append-only: a trigger raises on `UPDATE`/`DELETE`. Retention purges (Phase 12) must run as a privileged maintenance job that disables the trigger explicitly.
 
 ### Planned sequence and phase
 

@@ -7,7 +7,7 @@ Core model: **Tenant → Venue → Section → Bookable Resource → Availabilit
 
 ## Status
 
-**Phase 1 — Foundation: complete.** Backend solution, migrations, local infrastructure, Quasar shell, tests, Dockerfiles and GitLab CI are in place.
+**Phase 2 — Authentication & multi-tenancy: complete.** JWT + rotating refresh-token sign-in, tenant selection and switching, permission-based authorization, staff and tenant settings management, platform tenant administration, and a dev seeder with demo tenants.
 See [`docs/DEVELOPMENT_PHASES.md`](docs/DEVELOPMENT_PHASES.md) for the roadmap and current phase.
 
 ## Stack
@@ -60,8 +60,9 @@ docker compose ps            # both services should report (healthy)
 # 3. Copy connection strings into .NET user-secrets (shared by Api, Worker and Migrations)
 ./scripts/dev-secrets.ps1    # macOS/Linux: ./scripts/dev-secrets.sh
 
-# 4. Apply database migrations
-dotnet run --project Backend/BookingPlatform.Migrations --launch-profile migrate -- migrate
+# 4. Apply database migrations and create demo data (Development only; idempotent)
+dotnet run --project Backend/BookingPlatform.Migrations --launch-profile migrate
+dotnet run --project Backend/BookingPlatform.Migrations --launch-profile seed-dev
 
 # 5. Run the Api (http://localhost:5080, Swagger at /swagger) and the Worker
 dotnet run --project Backend/BookingPlatform.Api --launch-profile http
@@ -72,6 +73,15 @@ cd Frontend/BookingPlatform.Web
 npm ci
 npm run dev
 ```
+
+### Demo accounts (after `seed-dev`)
+
+All demo accounts use the password from `DEV_ADMIN_PASSWORD` in your `.env`. Never reuse it outside local development.
+
+| Account | Access |
+|---|---|
+| `DEV_ADMIN_EMAIL` (default `admin@demo.local`) | Platform admin; owner of **Demo Hospitality** and **Demo Coworking** (chooses a workspace after sign-in) |
+| `manager@`, `host@`, `staff@`, `viewer@` + the admin's email domain | Demo Hospitality with the Manager, Host, Staff and View-only roles |
 
 ### Common commands
 
