@@ -8,6 +8,7 @@ using BookingPlatform.Application.Common.Idempotency;
 using BookingPlatform.Application.Common.RateLimiting;
 using BookingPlatform.Application.Common.Validation;
 using BookingPlatform.Application.Payments;
+using BookingPlatform.Application.Subscriptions;
 using BookingPlatform.Application.Venues;
 using BookingPlatform.Domain.Bookings;
 using BookingPlatform.Domain.Identity;
@@ -36,6 +37,7 @@ public sealed partial class PublicBookingService(
     IBookingRepository bookings,
     PaymentService paymentService,
     IPaymentRepository payments,
+    SubscriptionService subscriptions,
     IPublicBookingTokens tokens,
     IRateLimiter rateLimiter,
     IOptions<PublicBookingOptions> options,
@@ -57,10 +59,25 @@ public sealed partial class PublicBookingService(
         var deposit = settings.DepositPolicy != DepositPolicies.None && settings.DepositAmountMinor is { } amount
             ? new PublicDepositDto(settings.DepositPolicy, amount, settings.Currency, settings.PaymentWindowMinutes)
             : null;
+        var branding = await subscriptions.GetPublicBrandingAsync(locator.TenantId, cancellationToken);
         return new PublicVenueDto(locator.TenantSlug, locator.TenantName, venue.Slug, venue.Name, venue.Description, venue.AddressLine1,
             venue.AddressLine2, venue.City, venue.Region, venue.PostalCode, venue.CountryCode, venue.Phone, venue.Email, venue.TimeZone,
             rules.MinPartySize, rules.MaxPartySize, rules.DefaultDurationMinutes, rules.MinLeadTimeMinutes, today,
-            today.AddDays(rules.MaxAdvanceDays), rules.PublicCancellationCutoffMinutes, rules.AutoConfirmPublicBookings, deposit);
+            today.AddDays(rules.MaxAdvanceDays), rules.PublicCancellationCutoffMinutes, rules.AutoConfirmPublicBookings, deposit, branding);
+    }
+
+    /// <summary>The tenant's bookable locations. Suspended or unknown tenants are indistinguishable (404).</summary>
+    public async Task<PublicTenantDto> GetTenantAsync(string tenantSlug, CancellationToken cancellationToken)
+    {
+        var tenant = IsSlug(tenantSlug) ? await directory.FindTenantAsync(tenantSlug, cancellationToken) : null;
+        if (tenant is null || tenant.Status != TenantStatus.Active)
+        {
+            throw new NotFoundAppException(ErrorCodes.TenantNotFound, "The business was not found or does not take online bookings.");
+        }
+
+        var locations = await directory.ListBookableVenuesAsync(tenant.TenantId, cancellationToken);
+        var branding = await subscriptions.GetPublicBrandingAsync(tenant.TenantId, cancellationToken);
+        return new PublicTenantDto(tenant.Slug, tenant.Name, branding, locations);
     }
 
     public async Task<PublicAvailabilityDto> GetAvailabilityAsync(string tenantSlug, string venueSlug, DateOnly date, int partySize, CancellationToken cancellationToken)

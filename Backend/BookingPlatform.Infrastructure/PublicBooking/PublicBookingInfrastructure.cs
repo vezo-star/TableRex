@@ -28,6 +28,21 @@ public sealed class PublicDirectory(DbSession db) : IPublicDirectory
         return row is null ? null : Map(row);
     }
 
+    public Task<PublicTenantLocator?> FindTenantAsync(string tenantSlug, CancellationToken cancellationToken) =>
+        db.QuerySingleOrDefaultAsync<PublicTenantLocator>("SELECT id AS tenant_id, slug, name, status FROM tenants WHERE slug = @tenantSlug",
+            new { tenantSlug }, cancellationToken);
+
+    public Task<IReadOnlyList<PublicVenueSummaryDto>> ListBookableVenuesAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        db.QueryAsync<PublicVenueSummaryDto>(
+            """
+            SELECT slug, name, description, city, country_code, time_zone
+            FROM venues
+            WHERE tenant_id = @tenantId AND status = 'ACTIVE' AND public_booking_enabled
+            ORDER BY name, id
+            LIMIT 200
+            """,
+            new { tenantId }, cancellationToken);
+
     private static PublicVenueLocator Map(Row r) => new(r.TenantId, r.TenantSlug, r.TenantName, r.TenantStatus, r.VenueId, r.VenueSlug);
 
     private sealed class Row

@@ -18,13 +18,20 @@ public sealed class TestData(string connectionString)
 
     public string ConnectionString => connectionString;
 
-    public async Task<Guid> CreateTenantAsync(string? slug = null, string name = "Test Tenant", string timeZone = "Africa/Johannesburg")
+    /// <param name="plan">Test tenants default to the unlimited plan so plan limits only apply where a test opts in.</param>
+    public async Task<Guid> CreateTenantAsync(string? slug = null, string name = "Test Tenant", string timeZone = "Africa/Johannesburg", string? plan = "ENTERPRISE")
     {
         slug ??= "t-" + Guid.NewGuid().ToString("N")[..12];
         await using var connection = new NpgsqlConnection(connectionString);
-        return await connection.ExecuteScalarAsync<Guid>(
+        var tenantId = await connection.ExecuteScalarAsync<Guid>(
             "INSERT INTO tenants (name, slug, default_time_zone) VALUES (@name, @slug, @timeZone) RETURNING id",
             new { name, slug, timeZone });
+        if (plan is not null)
+        {
+            await connection.ExecuteAsync("INSERT INTO tenant_subscriptions (tenant_id, plan_code) VALUES (@tenantId, @plan)", new { tenantId, plan });
+        }
+
+        return tenantId;
     }
 
     public async Task<TestUser> CreateUserAsync(string? email = null, bool platformAdmin = false, string? password = null)

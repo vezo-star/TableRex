@@ -6,6 +6,7 @@ using BookingPlatform.Application.Common.Security;
 using BookingPlatform.Application.Common.Time;
 using BookingPlatform.Application.Common.Validation;
 using BookingPlatform.Application.Identity;
+using BookingPlatform.Application.Subscriptions;
 using BookingPlatform.Application.Venues;
 using BookingPlatform.Domain.Identity;
 using FluentValidation;
@@ -29,7 +30,8 @@ public sealed class StaffService(
     IValidator<UpdateStaffRolesRequest> rolesValidator,
     IValidator<StaffQuery> queryValidator,
     IVenueAccessRepository venueAccess,
-    IValidator<UpdateStaffVenuesRequest> venuesValidator)
+    IValidator<UpdateStaffVenuesRequest> venuesValidator,
+    PlanLimits planLimits)
 {
     private const string NotFoundMessage = "The staff member was not found.";
 
@@ -80,6 +82,7 @@ public sealed class StaffService(
                 accountCreated = true;
             }
 
+            await planLimits.EnsureCanAddStaffAsync(tenantId, cancellationToken);
             var tenantUserId = await staff.CreateMembershipAsync(tenantId, userId, cancellationToken);
             await staff.ReplaceRolesAsync(tenantId, tenantUserId, requestedRoles, cancellationToken);
             await audit.WriteAsync(new AuditEntry(tenantId, "tenant_user", tenantUserId, AuditActions.Created,
@@ -185,6 +188,10 @@ public sealed class StaffService(
                 }
 
                 await refreshTokens.RevokeAllForUserInTenantAsync(member.UserId, tenantId, RevocationReasons.MembershipRevoked, clock.UtcNow, cancellationToken);
+            }
+            else if (status == MembershipStatus.Active)
+            {
+                await planLimits.EnsureCanAddStaffAsync(tenantId, cancellationToken);
             }
 
             await staff.SetStatusAsync(tenantId, tenantUserId, status, cancellationToken);

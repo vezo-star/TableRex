@@ -26,7 +26,11 @@ using BookingPlatform.Infrastructure.Persistence;
 using BookingPlatform.Application.PublicBooking;
 using BookingPlatform.Infrastructure.PublicBooking;
 using BookingPlatform.Infrastructure.RateLimiting;
+using BookingPlatform.Application.Reports;
+using BookingPlatform.Infrastructure.Reports;
 using BookingPlatform.Infrastructure.Security;
+using BookingPlatform.Application.Subscriptions;
+using BookingPlatform.Infrastructure.Subscriptions;
 using BookingPlatform.Infrastructure.Tenancy;
 using BookingPlatform.Application.Tenancy;
 using BookingPlatform.Application.Venues;
@@ -119,6 +123,8 @@ public static class DependencyInjection
         services.AddScoped<IPasswordResetRepository, PasswordResetRepository>();
         services.AddScoped<INotificationRepository, NotificationRepository>();
         services.AddScoped<IPaymentRepository, PaymentRepository>();
+        services.AddScoped<ISubscriptionRepository, SubscriptionRepository>();
+        services.AddScoped<IReportRepository, ReportRepository>();
 
         return services;
     }

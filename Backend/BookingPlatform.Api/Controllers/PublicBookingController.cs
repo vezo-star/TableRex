@@ -19,6 +19,12 @@ public sealed class PublicBookingController(PublicBookingService publicBooking) 
 {
     public const string TokenHeader = "X-Booking-Token";
 
+    /// <summary>The business's bookable locations and branding. The literal <c>booking</c> route wins, so that slug is reserved.</summary>
+    [HttpGet("{tenantSlug}")]
+    [RateLimit("public-read", 120, 60)]
+    public Task<PublicTenantDto> Tenant(string tenantSlug, CancellationToken cancellationToken) =>
+        publicBooking.GetTenantAsync(tenantSlug, cancellationToken);
+
     [HttpGet("{tenantSlug}/{venueSlug}")]
     [RateLimit("public-read", 120, 60)]
     public Task<PublicVenueDto> Venue(string tenantSlug, string venueSlug, CancellationToken cancellationToken) =>

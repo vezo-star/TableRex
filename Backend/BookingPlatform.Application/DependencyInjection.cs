@@ -6,6 +6,8 @@ using BookingPlatform.Application.Customers;
 using BookingPlatform.Application.Identity;
 using BookingPlatform.Application.Payments;
 using BookingPlatform.Application.PublicBooking;
+using BookingPlatform.Application.Reports;
+using BookingPlatform.Application.Subscriptions;
 using BookingPlatform.Application.Tenancy;
 using BookingPlatform.Application.Venues;
 using FluentValidation;
@@ -39,6 +41,9 @@ public static class DependencyInjection
         services.AddScoped<CustomerService>();
         services.AddScoped<AuditLogService>();
         services.AddScoped<PublicBookingService>();
+        services.AddScoped<PlanLimits>();
+        services.AddScoped<SubscriptionService>();
+        services.AddScoped<ReportService>();
 
         return services;
     }

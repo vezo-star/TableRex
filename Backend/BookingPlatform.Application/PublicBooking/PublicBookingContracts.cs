@@ -24,7 +24,15 @@ public sealed record PublicVenueDto(
     DateOnly LastBookableDate,
     int CancellationCutoffMinutes,
     bool AutoConfirm,
-    PublicDepositDto? Deposit = null);
+    PublicDepositDto? Deposit = null,
+    Subscriptions.PublicBrandingDto? Branding = null);
+
+/// <summary>A tenant's public landing page: its bookable locations (multi-location support) and branding.</summary>
+public sealed record PublicTenantDto(string Slug, string Name, Subscriptions.PublicBrandingDto? Branding, IReadOnlyList<PublicVenueSummaryDto> Venues);
+
+public sealed record PublicVenueSummaryDto(string Slug, string Name, string? Description, string? City, string? CountryCode, string TimeZone);
+
+public sealed record PublicTenantLocator(Guid TenantId, string Slug, string Name, string Status);
 
 /// <summary>The venue's deposit rule, shown before booking. <c>AmountMinor</c> is per booking or per guest.</summary>
 public sealed record PublicDepositDto(string Policy, long AmountMinor, string Currency, int PaymentWindowMinutes);
@@ -91,6 +99,11 @@ public interface IPublicDirectory
     Task<PublicVenueLocator?> FindAsync(string tenantSlug, string venueSlug, CancellationToken cancellationToken);
 
     Task<PublicVenueLocator?> GetAsync(Guid tenantId, Guid venueId, CancellationToken cancellationToken);
+
+    Task<PublicTenantLocator?> FindTenantAsync(string tenantSlug, CancellationToken cancellationToken);
+
+    /// <summary>Active venues with online booking enabled, by name.</summary>
+    Task<IReadOnlyList<PublicVenueSummaryDto>> ListBookableVenuesAsync(Guid tenantId, CancellationToken cancellationToken);
 }
 
 /// <summary>

@@ -78,9 +78,14 @@ public sealed class DevSeeder(ILogger<DevSeeder> logger)
     {
         await using var command = new NpgsqlCommand(
             """
-            INSERT INTO tenants (name, slug, default_time_zone) VALUES (@name, @slug, 'Africa/Johannesburg')
-            ON CONFLICT (slug) DO UPDATE SET slug = EXCLUDED.slug
-            RETURNING id
+            WITH tenant AS (
+                INSERT INTO tenants (name, slug, default_time_zone) VALUES (@name, @slug, 'Africa/Johannesburg')
+                ON CONFLICT (slug) DO UPDATE SET slug = EXCLUDED.slug
+                RETURNING id),
+            subscription AS (
+                INSERT INTO tenant_subscriptions (tenant_id, plan_code) SELECT id, 'PROFESSIONAL' FROM tenant
+                ON CONFLICT (tenant_id) DO NOTHING)
+            SELECT id FROM tenant
             """,
             connection,
             transaction);

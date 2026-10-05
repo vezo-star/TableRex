@@ -64,6 +64,7 @@ public static class ErrorCodes
 
     // SaaS and payments
     public const string PlanLimitReached = "PLAN_LIMIT_REACHED";
+    public const string PlanFeatureUnavailable = "PLAN_FEATURE_UNAVAILABLE";
     public const string PaymentNotFound = "PAYMENT_NOT_FOUND";
     public const string InvalidWebhookSignature = "INVALID_WEBHOOK_SIGNATURE";
     public const string PaymentUnavailable = "PAYMENT_UNAVAILABLE";

@@ -3,6 +3,7 @@ using BookingPlatform.Application.Common.Errors;
 using BookingPlatform.Application.Common.Persistence;
 using BookingPlatform.Application.Common.Security;
 using BookingPlatform.Application.Common.Validation;
+using BookingPlatform.Application.Subscriptions;
 using BookingPlatform.Domain.Time;
 using BookingPlatform.Domain.Venues;
 using FluentValidation;
@@ -16,6 +17,7 @@ public sealed class VenueService(
     IAuditWriter audit,
     IUnitOfWork unitOfWork,
     ITenantContext tenantContext,
+    PlanLimits planLimits,
     IValidator<CreateVenueRequest> createValidator,
     IValidator<UpdateVenueRequest> updateValidator,
     IValidator<SectionRequest> sectionValidator,
@@ -45,6 +47,7 @@ public sealed class VenueService(
 
         return await unitOfWork.ExecuteAsync(async () =>
         {
+            await planLimits.EnsureCanAddVenueAsync(tenantId, cancellationToken);
             if (await venues.SlugExistsAsync(tenantId, normalised.Slug, cancellationToken))
             {
                 throw new ConflictAppException(ErrorCodes.SlugTaken, "Another venue already uses that slug.");

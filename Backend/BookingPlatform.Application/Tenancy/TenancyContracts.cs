@@ -3,11 +3,12 @@ using BookingPlatform.Application.Common.Security;
 
 namespace BookingPlatform.Application.Tenancy;
 
-public sealed record TenantDto(Guid Id, string Name, string Slug, string Status, string DefaultTimeZone, DateTime CreatedAt, DateTime UpdatedAt);
+public sealed record TenantDto(Guid Id, string Name, string Slug, string Status, string DefaultTimeZone, DateTime CreatedAt, DateTime UpdatedAt, string PlanCode);
 
 public sealed record UpdateTenantRequest(string Name, string DefaultTimeZone);
 
-public sealed record CreateTenantRequest(string Name, string Slug, string DefaultTimeZone, NewOwnerRequest Owner);
+/// <param name="PlanCode">Subscription plan for the new tenant; the default plan when omitted.</param>
+public sealed record CreateTenantRequest(string Name, string Slug, string DefaultTimeZone, NewOwnerRequest Owner, string? PlanCode = null);
 
 public sealed record NewOwnerRequest(string Email, string DisplayName, string? Password);
 

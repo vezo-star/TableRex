@@ -33,11 +33,16 @@ public sealed class UpdateTenantRequestValidator : AbstractValidator<UpdateTenan
 
 public sealed class CreateTenantRequestValidator : AbstractValidator<CreateTenantRequest>
 {
+    /// <summary>Literal segments of public routes that would shadow <c>GET /api/v1/public/{tenantSlug}</c>.</summary>
+    public static readonly IReadOnlySet<string> ReservedSlugs = new HashSet<string>(StringComparer.Ordinal) { "booking" };
+
     public CreateTenantRequestValidator()
     {
         RuleFor(r => r.Name).ValidName();
         RuleFor(r => r.Slug).NotEmpty().MaximumLength(63).Matches("^[a-z0-9]+(-[a-z0-9]+)*$")
             .WithMessage("Slug may contain lowercase letters, digits and single hyphens.");
+        RuleFor(r => r.Slug).Must(slug => !ReservedSlugs.Contains(slug)).WithMessage("That slug is reserved.");
+        RuleFor(r => r.PlanCode).MaximumLength(40).Matches("^[A-Z][A-Z0-9_]{1,39}$").WithMessage("Unknown plan.");
         RuleFor(r => r.DefaultTimeZone).ValidTimeZone();
         RuleFor(r => r.Owner).NotNull();
         RuleFor(r => r.Owner.Email).ValidEmail().When(r => r.Owner is not null);

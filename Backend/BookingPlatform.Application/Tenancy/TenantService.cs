@@ -3,8 +3,10 @@ using BookingPlatform.Application.Common.Errors;
 using BookingPlatform.Application.Common.Pagination;
 using BookingPlatform.Application.Common.Persistence;
 using BookingPlatform.Application.Common.Security;
+using BookingPlatform.Application.Common.Time;
 using BookingPlatform.Application.Common.Validation;
 using BookingPlatform.Application.Identity;
+using BookingPlatform.Application.Subscriptions;
 using FluentValidation;
 
 namespace BookingPlatform.Application.Tenancy;
@@ -17,6 +19,8 @@ public sealed class TenantService(
     IAuditWriter audit,
     IUnitOfWork unitOfWork,
     ITenantContext tenantContext,
+    ISubscriptionRepository subscriptions,
+    IClock clock,
     IValidator<UpdateTenantRequest> updateValidator,
     IValidator<CreateTenantRequest> createValidator)
 {
@@ -57,7 +61,16 @@ public sealed class TenantService(
                 throw new ConflictAppException(ErrorCodes.SlugTaken, "That slug is already in use.");
             }
 
+            if (request.PlanCode is not null && !await subscriptions.PlanExistsAsync(request.PlanCode, cancellationToken))
+            {
+                throw new ValidationAppException("planCode", "Unknown plan.");
+            }
+
             var tenantId = await tenants.CreateAsync(request.Name.Trim(), request.Slug, request.DefaultTimeZone, cancellationToken);
+            if (request.PlanCode is not null)
+            {
+                await subscriptions.UpsertAsync(tenantId, new UpdateSubscriptionRequest(request.PlanCode), clock.UtcNow, cancellationToken);
+            }
 
             var existing = await users.GetByEmailAsync(email, cancellationToken);
             Guid userId;
@@ -79,7 +92,7 @@ public sealed class TenantService(
             await staff.ReplaceRolesAsync(tenantId, tenantUserId, [Roles.TenantOwner], cancellationToken);
 
             await audit.WriteAsync(new AuditEntry(tenantId, "tenant", tenantId, AuditActions.Created,
-                NewValues: new { request.Name, request.Slug, request.DefaultTimeZone, ownerUserId = userId }), cancellationToken);
+                NewValues: new { request.Name, request.Slug, request.DefaultTimeZone, request.PlanCode, ownerUserId = userId }), cancellationToken);
 
             return (await tenants.GetAsync(tenantId, cancellationToken))!;
         }, cancellationToken);

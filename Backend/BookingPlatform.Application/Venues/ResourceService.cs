@@ -6,6 +6,7 @@ using BookingPlatform.Application.Common.Persistence;
 using BookingPlatform.Application.Common.Security;
 using BookingPlatform.Application.Common.Time;
 using BookingPlatform.Application.Common.Validation;
+using BookingPlatform.Application.Subscriptions;
 using FluentValidation;
 
 namespace BookingPlatform.Application.Venues;
@@ -19,6 +20,7 @@ public sealed class ResourceService(
     IClock clock,
     IUnitOfWork unitOfWork,
     ITenantContext tenantContext,
+    PlanLimits planLimits,
     IValidator<CreateResourceTypeRequest> createTypeValidator,
     IValidator<UpdateResourceTypeRequest> updateTypeValidator,
     IValidator<CreateResourceRequest> createValidator,
@@ -96,6 +98,7 @@ public sealed class ResourceService(
         return await unitOfWork.ExecuteAsync(async () =>
         {
             await EnsureReferencesAsync(tenantId, request.VenueId, request.SectionId, request.ResourceTypeId, cancellationToken);
+            await planLimits.EnsureCanAddResourceAsync(tenantId, request.VenueId, cancellationToken);
             if (await resources.CodeExistsAsync(tenantId, request.VenueId, normalised.Code, null, cancellationToken))
             {
                 throw new ConflictAppException(ErrorCodes.CodeTaken, "Another resource in this venue already uses that code.");
@@ -119,6 +122,11 @@ public sealed class ResourceService(
         return await unitOfWork.ExecuteAsync(async () =>
         {
             await EnsureReferencesAsync(tenantId, existing.VenueId, request.SectionId, request.ResourceTypeId, cancellationToken);
+            if (!existing.IsActive && request.IsActive)
+            {
+                await planLimits.EnsureCanAddResourceAsync(tenantId, existing.VenueId, cancellationToken);
+            }
+
             if (await resources.CodeExistsAsync(tenantId, existing.VenueId, normalised.Code, id, cancellationToken))
             {
                 throw new ConflictAppException(ErrorCodes.CodeTaken, "Another resource in this venue already uses that code.");

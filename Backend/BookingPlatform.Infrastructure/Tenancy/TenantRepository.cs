@@ -6,13 +6,18 @@ namespace BookingPlatform.Infrastructure.Tenancy;
 
 public sealed class TenantRepository(DbSession db) : ITenantRepository
 {
-    private const string Columns = "id, name, slug, status, default_time_zone, created_at, updated_at";
+    private const string Columns = """
+        id, name, slug, status, default_time_zone, created_at, updated_at,
+        coalesce((SELECT s.plan_code FROM tenant_subscriptions s WHERE s.tenant_id = tenants.id),
+                 (SELECT p.code FROM plans p WHERE p.is_default)) AS plan_code
+        """;
 
     public Task<TenantDto?> GetAsync(Guid tenantId, CancellationToken cancellationToken) =>
         db.QuerySingleOrDefaultAsync<TenantDto>($"SELECT {Columns} FROM tenants WHERE id = @tenantId", new { tenantId }, cancellationToken);
 
+    // NO KEY UPDATE serialises callers without blocking concurrent inserts whose foreign keys reference the tenant row.
     public Task LockAsync(Guid tenantId, CancellationToken cancellationToken) =>
-        db.ExecuteAsync("SELECT 1 FROM tenants WHERE id = @tenantId FOR UPDATE", new { tenantId }, cancellationToken);
+        db.ExecuteAsync("SELECT 1 FROM tenants WHERE id = @tenantId FOR NO KEY UPDATE", new { tenantId }, cancellationToken);
 
     public Task UpdateAsync(Guid tenantId, string name, string defaultTimeZone, CancellationToken cancellationToken) =>
         db.ExecuteAsync(

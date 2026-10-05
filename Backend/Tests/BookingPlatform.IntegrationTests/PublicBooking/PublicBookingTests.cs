@@ -21,7 +21,7 @@ public sealed class PublicBookingTests(InfrastructureFixture fixture) : ApiTestB
     [
         "tenantSlug", "tenantName", "slug", "name", "description", "addressLine1", "addressLine2", "city", "region", "postalCode",
         "countryCode", "phone", "email", "timeZone", "minPartySize", "maxPartySize", "durationMinutes", "minLeadTimeMinutes", "today",
-        "lastBookableDate", "cancellationCutoffMinutes", "autoConfirm", "deposit",
+        "lastBookableDate", "cancellationCutoffMinutes", "autoConfirm", "deposit", "branding",
     ];
 
     private static readonly string[] ConfirmationFields =
