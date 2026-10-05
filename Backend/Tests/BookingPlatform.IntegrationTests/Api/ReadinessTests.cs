@@ -28,7 +28,7 @@ public sealed class ReadinessTests(InfrastructureFixture fixture)
     }
 
     [Fact]
-    public async Task Readiness_reports_only_the_failing_dependency()
+    public async Task Redis_outage_degrades_readiness_without_taking_the_instance_out_of_rotation()
     {
         var postgres = await fixture.CreateMigratedDatabaseAsync();
         await using var factory = new ApiFactory(postgres, ApiFactory.UnreachableRedis);
@@ -36,10 +36,11 @@ public sealed class ReadinessTests(InfrastructureFixture fixture)
 
         var response = await client.GetAsync("/health/ready", Ct);
 
-        response.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
         using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct));
+        body.RootElement.GetProperty("status").GetString().Should().Be("Degraded");
         body.RootElement.GetProperty("checks").EnumerateArray()
             .Select(check => (check.GetProperty("name").GetString(), check.GetProperty("status").GetString()))
-            .Should().BeEquivalentTo([("postgres", "Healthy"), ("redis", "Unhealthy")]);
+            .Should().BeEquivalentTo([("postgres", "Healthy"), ("redis", "Degraded")]);
     }
 }

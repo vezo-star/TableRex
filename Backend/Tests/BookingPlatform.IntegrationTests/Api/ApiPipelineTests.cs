@@ -48,7 +48,7 @@ public sealed class ApiPipelineTests(UnreachableDependenciesApiFixture fixture) 
 
         var checks = body.RootElement.GetProperty("checks").EnumerateArray()
             .ToDictionary(check => check.GetProperty("name").GetString()!, check => check.GetProperty("status").GetString());
-        checks.Should().BeEquivalentTo(new Dictionary<string, string?> { ["postgres"] = "Unhealthy", ["redis"] = "Unhealthy" });
+        checks.Should().BeEquivalentTo(new Dictionary<string, string?> { ["postgres"] = "Unhealthy", ["redis"] = "Degraded" });
 
         raw.Should().NotContainAny("127.0.0.1", "Password", "Exception", "unreachable (");
     }

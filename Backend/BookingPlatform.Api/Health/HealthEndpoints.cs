@@ -17,9 +17,11 @@ public static class HealthEndpoints
 
     public static IServiceCollection AddPlatformHealthChecks(this IServiceCollection services)
     {
+        // Redis holds no authoritative data and the Api keeps serving without it (in-memory rate-limit fallback), so an
+        // outage is Degraded (still HTTP 200): a load balancer must not pull every instance out of rotation for it.
         services.AddHealthChecks()
             .AddCheck<PostgresHealthCheck>("postgres", HealthStatus.Unhealthy, [ReadyTag], CheckTimeout)
-            .AddCheck<RedisHealthCheck>("redis", HealthStatus.Unhealthy, [ReadyTag], CheckTimeout);
+            .AddCheck<RedisHealthCheck>("redis", HealthStatus.Degraded, [ReadyTag], CheckTimeout);
 
         return services;
     }
