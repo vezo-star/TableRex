@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using BookingPlatform.Application.Common.Auditing;
 using BookingPlatform.Application.Common.Errors;
+using BookingPlatform.Application.Common.Outbox;
 using BookingPlatform.Application.Common.Persistence;
 using BookingPlatform.Application.Common.RateLimiting;
 using BookingPlatform.Application.Common.Security;
@@ -43,10 +44,15 @@ public sealed class AuthService(
     IClock clock,
     IRequestMetadata requestMetadata,
     IOptions<AuthOptions> options,
-    ILogger<AuthService> logger)
+    ILogger<AuthService> logger,
+    IPasswordResetRepository passwordResets,
+    IOutboxWriter outbox)
 {
+    public static readonly TimeSpan PasswordResetLifetime = TimeSpan.FromMinutes(30);
+
     private const string InvalidCredentialsMessage = "The email or password is incorrect.";
     private const string InvalidRefreshMessage = "Your session has expired. Please sign in again.";
+    private const string InvalidResetMessage = "This password reset link is invalid or has expired. Request a new one.";
 
     private readonly AuthOptions _options = options.Value;
 
@@ -262,11 +268,81 @@ public sealed class AuthService(
             var now = clock.UtcNow;
             await users.UpdatePasswordAsync(userId, newHash, now, cancellationToken);
             await refreshTokens.RevokeAllForUserAsync(userId, RevocationReasons.PasswordChanged, now, cancellationToken);
+            await passwordResets.InvalidateOutstandingAsync(userId, now, cancellationToken);
             await audit.WriteAsync(new AuditEntry(tenantId, "user", userId, AuditActions.PasswordChanged), cancellationToken);
 
             var refresh = await IssueRefreshTokenAsync(userId, tenantId, Guid.CreateVersion7(), null, now, cancellationToken);
             var userMemberships = await memberships.GetActiveMembershipsAsync(userId, cancellationToken);
             return new AuthSession(accessTokenIssuer.Issue(userId, tenantId), refresh, userId, tenantId, userMemberships);
+        }, cancellationToken);
+    }
+
+    /// <summary>
+    /// Queues a reset email for an active account. Always completes the same way so callers cannot tell whether the
+    /// email belongs to an account; per-email throttling silently drops excess requests.
+    /// </summary>
+    public async Task RequestPasswordResetAsync(string email, CancellationToken cancellationToken)
+    {
+        var normalisedEmail = email.Trim().ToLowerInvariant();
+        var emailKey = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(normalisedEmail)));
+        var limit = await rateLimiter.AcquireAsync($"password-reset:account:{emailKey}", 3, TimeSpan.FromHours(1), cancellationToken);
+        if (!limit.Allowed)
+        {
+            logger.LogInformation("Password reset request throttled for one account");
+            return;
+        }
+
+        var user = await users.GetByEmailAsync(normalisedEmail, cancellationToken);
+        if (user is null || user.Status != UserStatus.Active)
+        {
+            return;
+        }
+
+        await unitOfWork.ExecuteAsync(async () =>
+        {
+            var now = clock.UtcNow;
+            var requestId = Guid.CreateVersion7();
+            await passwordResets.InvalidateOutstandingAsync(user.Id, now, cancellationToken);
+            await passwordResets.InsertAsync(requestId, user.Id, now + PasswordResetLifetime, requestMetadata.IpAddress, cancellationToken);
+            await outbox.WritePasswordResetAsync(requestId, now, cancellationToken);
+            await audit.WriteAsync(new AuditEntry(null, "user", user.Id, AuditActions.PasswordResetRequested) { ActorUserId = user.Id }, cancellationToken);
+        }, cancellationToken);
+    }
+
+    /// <summary>Sets a new password from an emailed token, unlocks the account and signs out every session.</summary>
+    public async Task ResetPasswordAsync(string? token, string newPassword, CancellationToken cancellationToken)
+    {
+        if (!RefreshTokens.IsWellFormed(token))
+        {
+            throw new BadRequestAppException(ErrorCodes.InvalidResetToken, InvalidResetMessage);
+        }
+
+        var hash = RefreshTokens.Hash(token!);
+        await unitOfWork.ExecuteAsync(async () =>
+        {
+            var now = clock.UtcNow;
+            var request = await passwordResets.GetByTokenHashForUpdateAsync(hash, cancellationToken);
+            if (request is null || request.UsedAt is not null || request.InvalidatedAt is not null || request.ExpiresAt <= now)
+            {
+                throw new BadRequestAppException(ErrorCodes.InvalidResetToken, InvalidResetMessage);
+            }
+
+            var user = await users.GetByIdForUpdateAsync(request.UserId, cancellationToken);
+            if (user is null || user.Status != UserStatus.Active)
+            {
+                throw new BadRequestAppException(ErrorCodes.InvalidResetToken, InvalidResetMessage);
+            }
+
+            if (PasswordPolicy.Validate(newPassword, user.Email) is { } policyError)
+            {
+                throw new ValidationAppException("newPassword", policyError);
+            }
+
+            await users.UpdatePasswordAsync(user.Id, passwordHasher.Hash(newPassword), now, cancellationToken);
+            await passwordResets.MarkUsedAsync(request.Id, now, cancellationToken);
+            await passwordResets.InvalidateOutstandingAsync(user.Id, now, cancellationToken);
+            await refreshTokens.RevokeAllForUserAsync(user.Id, RevocationReasons.PasswordReset, now, cancellationToken);
+            await audit.WriteAsync(new AuditEntry(null, "user", user.Id, AuditActions.PasswordReset) { ActorUserId = user.Id }, cancellationToken);
         }, cancellationToken);
     }
 

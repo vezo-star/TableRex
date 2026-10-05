@@ -21,6 +21,12 @@ public sealed record ChangePasswordRequest(
     [Required, MaxLength(PasswordPolicy.MaxLength * 4)] string CurrentPassword,
     [Required, MaxLength(PasswordPolicy.MaxLength * 4)] string NewPassword);
 
+public sealed record ForgotPasswordRequest([Required, EmailAddress, MaxLength(254)] string Email);
+
+public sealed record ResetPasswordRequest(
+    [Required, MaxLength(128)] string Token,
+    [Required, MaxLength(PasswordPolicy.MaxLength * 4)] string NewPassword);
+
 public sealed record MembershipResponse(Guid TenantId, string TenantName, string TenantSlug, IReadOnlyList<string> Roles);
 
 public sealed record AuthResponse(
@@ -142,6 +148,32 @@ public sealed class AuthController(AuthService auth, IOptions<CorsSettings> cors
             currentUser.RequireUserId(), tenantContext.HasTenant ? tenantContext.TenantId : null,
             request.CurrentPassword, request.NewPassword, cancellationToken);
         return Issue(session);
+    }
+
+    /// <summary>Emails a single-use reset link when the address belongs to an active account. Always 202.</summary>
+    [HttpPost("password/forgot")]
+    [AllowAnonymous]
+    [RateLimit("password-forgot", 5, 900)]
+    [ProducesResponseType(StatusCodes.Status202Accepted)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status429TooManyRequests)]
+    public async Task<IActionResult> ForgotPassword(ForgotPasswordRequest request, CancellationToken cancellationToken)
+    {
+        await auth.RequestPasswordResetAsync(request.Email, cancellationToken);
+        return Accepted();
+    }
+
+    /// <summary>Sets a new password from an emailed token and signs out every session of the account.</summary>
+    [HttpPost("password/reset")]
+    [AllowAnonymous]
+    [RateLimit("password-reset", 10, 900)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status429TooManyRequests)]
+    public async Task<IActionResult> ResetPassword(ResetPasswordRequest request, CancellationToken cancellationToken)
+    {
+        await auth.ResetPasswordAsync(request.Token, request.NewPassword, cancellationToken);
+        Response.Headers.CacheControl = "no-store";
+        return NoContent();
     }
 
     private AuthResponse Issue(AuthSession session)

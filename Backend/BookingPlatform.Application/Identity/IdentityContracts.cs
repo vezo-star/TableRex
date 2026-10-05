@@ -124,12 +124,39 @@ public interface IMembershipRepository
     Task<Common.Security.TenantAccess?> GetTenantAccessAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken);
 }
 
+public sealed record PasswordResetRequestRecord
+{
+    public Guid Id { get; init; }
+    public Guid UserId { get; init; }
+    public DateTime ExpiresAt { get; init; }
+    public DateTime? UsedAt { get; init; }
+    public DateTime? InvalidatedAt { get; init; }
+}
+
+public interface IPasswordResetRepository
+{
+    Task InsertAsync(Guid id, Guid userId, DateTime expiresAt, string? requestedIp, CancellationToken cancellationToken);
+
+    /// <summary>Earlier unused requests stop working once a newer one is made or the password changes.</summary>
+    Task InvalidateOutstandingAsync(Guid userId, DateTime now, CancellationToken cancellationToken);
+
+    Task<PasswordResetRequestRecord?> GetByTokenHashForUpdateAsync(byte[] tokenHash, CancellationToken cancellationToken);
+
+    Task MarkUsedAsync(Guid id, DateTime now, CancellationToken cancellationToken);
+
+    Task<Notifications.PasswordResetDelivery?> GetForDeliveryAsync(Guid id, CancellationToken cancellationToken);
+
+    /// <summary>Stores the hash of a freshly generated token for a request that is still open; false when it no longer is.</summary>
+    Task<bool> SetTokenHashAsync(Guid id, byte[] tokenHash, DateTime now, CancellationToken cancellationToken);
+}
+
 public static class RevocationReasons
 {
     public const string Rotated = "ROTATED";
     public const string Reuse = "REUSE_DETECTED";
     public const string Logout = "LOGOUT";
     public const string PasswordChanged = "PASSWORD_CHANGED";
+    public const string PasswordReset = "PASSWORD_RESET";
     public const string TenantSwitched = "TENANT_SWITCHED";
     public const string MembershipRevoked = "MEMBERSHIP_REVOKED";
     public const string UserDisabled = "USER_DISABLED";

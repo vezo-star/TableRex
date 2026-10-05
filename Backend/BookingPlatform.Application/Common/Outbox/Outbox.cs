@@ -25,6 +25,7 @@ public static class NotificationTypes
 {
     public const string BookingConfirmation = "BookingConfirmation";
     public const string BookingCancellation = "BookingCancellation";
+    public const string PasswordReset = "PasswordReset";
 }
 
 /// <summary>Minimal realtime payload: no PII, clients refetch through the authorised API (REALTIME.md §3).</summary>
@@ -39,6 +40,9 @@ public sealed record RealtimePayload(
 
 /// <summary>Notification payload: ids only; the notification worker loads contact details when it sends.</summary>
 public sealed record NotificationPayload(Guid EventId, string Type, Guid VenueId, Guid BookingId, DateTime OccurredAt);
+
+/// <summary>Password reset payload: the request id only; the Worker creates the token when it sends.</summary>
+public sealed record PasswordResetPayload(Guid EventId, string Type, Guid RequestId, DateTime OccurredAt);
 
 public sealed record OutboxMessage(Guid Id, Guid? TenantId, string Destination, string Type, object Payload);
 
@@ -69,6 +73,16 @@ public static class OutboxWriterExtensions
         var id = Guid.CreateVersion7();
         return writer.WriteAsync(
             [new OutboxMessage(id, tenantId, OutboxDestinations.Notification, type, new NotificationPayload(id, type, venueId, bookingId, occurredAt))],
+            cancellationToken);
+    }
+
+    public static Task WritePasswordResetAsync(this IOutboxWriter writer, Guid requestId, DateTime occurredAt, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(writer);
+        var id = Guid.CreateVersion7();
+        const string type = NotificationTypes.PasswordReset;
+        return writer.WriteAsync(
+            [new OutboxMessage(id, null, OutboxDestinations.Notification, type, new PasswordResetPayload(id, type, requestId, occurredAt))],
             cancellationToken);
     }
 }

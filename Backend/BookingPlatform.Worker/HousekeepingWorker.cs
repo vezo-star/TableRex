@@ -60,11 +60,13 @@ public sealed class HousekeepingWorker(
                 await RunSafelyAsync("retention purge", async repository =>
                 {
                     var result = await repository.PurgeAsync(clock.UtcNow, settings.BatchSize, stoppingToken);
-                    if (result.IdempotencyKeys + result.RefreshTokens + result.OutboxMessages > 0)
+                    if (result.Total > 0)
                     {
                         logger.LogInformation(
-                            "Purged {IdempotencyKeys} idempotency keys, {RefreshTokens} refresh tokens, {OutboxMessages} outbox messages",
-                            result.IdempotencyKeys, result.RefreshTokens, result.OutboxMessages);
+                            "Purged {IdempotencyKeys} idempotency keys, {RefreshTokens} refresh tokens, {OutboxMessages} outbox messages, "
+                            + "{PasswordResetRequests} password reset requests, {NotificationDeliveries} notification deliveries",
+                            result.IdempotencyKeys, result.RefreshTokens, result.OutboxMessages, result.PasswordResetRequests,
+                            result.NotificationDeliveries);
                     }
                 }, stoppingToken);
             }

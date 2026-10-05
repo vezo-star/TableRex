@@ -2,7 +2,11 @@ using BookingPlatform.Infrastructure.Persistence;
 
 namespace BookingPlatform.Infrastructure.Housekeeping;
 
-public sealed record HousekeepingPurgeResult(int IdempotencyKeys, int RefreshTokens, int OutboxMessages);
+public sealed record HousekeepingPurgeResult(
+    int IdempotencyKeys, int RefreshTokens, int OutboxMessages, int PasswordResetRequests = 0, int NotificationDeliveries = 0)
+{
+    public int Total => IdempotencyKeys + RefreshTokens + OutboxMessages + PasswordResetRequests + NotificationDeliveries;
+}
 
 /// <summary>
 /// Worker maintenance. Correctness never depends on these running: availability ignores expired holds at read time
@@ -12,6 +16,8 @@ public sealed class HousekeepingRepository(DbSession db)
 {
     public static readonly TimeSpan RefreshTokenRetention = TimeSpan.FromDays(30);
     public static readonly TimeSpan ProcessedOutboxRetention = TimeSpan.FromDays(30);
+    public static readonly TimeSpan PasswordResetRetention = TimeSpan.FromDays(7);
+    public static readonly TimeSpan NotificationDeliveryRetention = TimeSpan.FromDays(180);
 
     /// <summary>
     /// Deactivates a batch of expired hold allocations, marks their holds EXPIRED and writes one <c>HoldExpired</c>
@@ -91,6 +97,20 @@ public sealed class HousekeepingRepository(DbSession db)
             """,
             new { cutoff = now - ProcessedOutboxRetention, batchSize }, cancellationToken);
 
-        return new HousekeepingPurgeResult(keys, tokens, outbox);
+        var resets = await db.ExecuteAsync(
+            """
+            DELETE FROM password_reset_requests WHERE id IN (
+                SELECT id FROM password_reset_requests WHERE expires_at <= @cutoff ORDER BY expires_at LIMIT @batchSize)
+            """,
+            new { cutoff = now - PasswordResetRetention, batchSize }, cancellationToken);
+
+        var deliveries = await db.ExecuteAsync(
+            """
+            DELETE FROM notification_deliveries WHERE id IN (
+                SELECT id FROM notification_deliveries WHERE created_at <= @cutoff ORDER BY created_at LIMIT @batchSize)
+            """,
+            new { cutoff = now - NotificationDeliveryRetention, batchSize }, cancellationToken);
+
+        return new HousekeepingPurgeResult(keys, tokens, outbox, resets, deliveries);
     }
 }

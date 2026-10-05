@@ -59,6 +59,7 @@ public static class ErrorCodes
     public const string HoldExpired = "HOLD_EXPIRED";
     public const string CancellationNotAllowed = "CANCELLATION_NOT_ALLOWED";
     public const string ContactBookingLimit = "CONTACT_BOOKING_LIMIT";
+    public const string InvalidResetToken = "INVALID_RESET_TOKEN";
     public const string BookingWindow = "OUTSIDE_BOOKING_WINDOW";
 
     // SaaS and payments

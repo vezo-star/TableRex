@@ -10,12 +10,15 @@ using BookingPlatform.Infrastructure.Bookings;
 using BookingPlatform.Infrastructure.Availability;
 using BookingPlatform.Application.Common.Persistence;
 using BookingPlatform.Application.Common.RateLimiting;
+using BookingPlatform.Application.Common.Security;
 using BookingPlatform.Application.Common.Time;
 using BookingPlatform.Application.Identity;
 using BookingPlatform.Infrastructure.Auditing;
 using BookingPlatform.Infrastructure.Configuration;
 using BookingPlatform.Infrastructure.HealthChecks;
 using BookingPlatform.Infrastructure.Identity;
+using BookingPlatform.Application.Notifications;
+using BookingPlatform.Infrastructure.Notifications;
 using BookingPlatform.Infrastructure.Outbox;
 using BookingPlatform.Infrastructure.Persistence;
 using BookingPlatform.Application.PublicBooking;
@@ -73,6 +76,8 @@ public static class DependencyInjection
         services.AddScoped<DbSession>();
         services.AddScoped<IUnitOfWork>(serviceProvider => serviceProvider.GetRequiredService<DbSession>());
         services.AddScoped<IAuditWriter, AuditWriter>();
+        services.TryAddScoped<ICurrentUser, BackgroundCurrentUser>();
+        services.TryAddScoped<IRequestMetadata, BackgroundRequestMetadata>();
         services.AddOptions<RateLimitingOptions>()
             .Bind(configuration.GetSection(RateLimitingOptions.SectionName))
             .Validate(options => !string.IsNullOrWhiteSpace(options.KeyPrefix), "RateLimiting:KeyPrefix must not be empty.");
@@ -108,7 +113,27 @@ public static class DependencyInjection
         services.AddScoped<ICustomerRepository, CustomerRepository>();
         services.AddScoped<IAuditLogRepository, AuditLogRepository>();
         services.AddScoped<IPublicDirectory, PublicDirectory>();
+        services.AddScoped<IPasswordResetRepository, PasswordResetRepository>();
+        services.AddScoped<INotificationRepository, NotificationRepository>();
 
+        return services;
+    }
+
+    /// <summary>Email delivery for the Worker: options (validated on start), the configured provider and the notification service.</summary>
+    public static IServiceCollection AddNotifications(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddOptions<NotificationOptions>()
+            .Bind(configuration.GetSection(NotificationOptions.SectionName))
+            .Validate(NotificationOptions.IsValid,
+                "Notifications:PublicBaseUrl must be an absolute http(s) origin without a trailing slash, Notifications:Email:FromAddress must be a valid address, and the Email provider settings must be complete.")
+            .ValidateOnStart();
+        services.AddSingleton<SmtpEmailProvider>();
+        services.AddSingleton<LogEmailProvider>();
+        services.AddSingleton<IEmailProvider>(serviceProvider =>
+            serviceProvider.GetRequiredService<IOptions<NotificationOptions>>().Value.Email.Provider == EmailProviders.Log
+                ? serviceProvider.GetRequiredService<LogEmailProvider>()
+                : serviceProvider.GetRequiredService<SmtpEmailProvider>());
+        services.AddScoped<NotificationService>();
         return services;
     }
 

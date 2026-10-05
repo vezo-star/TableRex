@@ -1,6 +1,7 @@
 using BookingPlatform.Infrastructure;
 using BookingPlatform.Infrastructure.Housekeeping;
 using BookingPlatform.Infrastructure.Logging;
+using BookingPlatform.Infrastructure.Notifications;
 using BookingPlatform.Worker;
 using Serilog;
 
@@ -21,6 +22,9 @@ builder.Services.AddSerilog(
 builder.Services.Configure<HostOptions>(options => options.ShutdownTimeout = TimeSpan.FromSeconds(30));
 
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddPublicBookingTokens(builder.Configuration);
+builder.Services.AddNotifications(builder.Configuration);
+builder.Services.AddHostedService<NotificationOutboxDispatcher>();
 builder.Services.AddScoped<HousekeepingRepository>();
 builder.Services.AddOptions<HousekeepingOptions>()
     .Bind(builder.Configuration.GetSection(HousekeepingOptions.SectionName))

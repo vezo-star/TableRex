@@ -392,6 +392,10 @@ public sealed partial class BookingService(
                 {
                     await outbox.WriteNotificationAsync(tenantId, NotificationTypes.BookingCancellation, after.VenueId, id, now, cancellationToken);
                 }
+                else if (command == BookingCommand.Confirm && locked.Status is BookingStatus.Pending or BookingStatus.Held && after.CustomerId is not null)
+                {
+                    await outbox.WriteNotificationAsync(tenantId, NotificationTypes.BookingConfirmation, after.VenueId, id, now, cancellationToken);
+                }
 
                 return after;
             }, cancellationToken),
