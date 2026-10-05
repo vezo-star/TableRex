@@ -4,6 +4,7 @@ using BookingPlatform.Api.Security;
 using BookingPlatform.Application.Common.Errors;
 using BookingPlatform.Application.Common.Security;
 using BookingPlatform.Application.Identity;
+using BookingPlatform.Application.Venues;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
@@ -96,9 +97,13 @@ public sealed class AuthController(AuthService auth, IOptions<CorsSettings> cors
     [Authorize]
     [ProducesResponseType<MeResponse>(StatusCodes.Status200OK)]
     public async Task<ActionResult<MeResponse>> Me(
-        [FromServices] ICurrentUser currentUser, [FromServices] ITenantContext tenantContext, CancellationToken cancellationToken)
+        [FromServices] ICurrentUser currentUser, [FromServices] ITenantContext tenantContext,
+        [FromServices] IVenueAccessRepository venueAccess, CancellationToken cancellationToken)
     {
         var me = await auth.GetMeAsync(currentUser.RequireUserId(), tenantContext, cancellationToken);
+        IReadOnlyList<Guid> venueIds = !tenantContext.HasTenant ? []
+            : tenantContext.HasAllVenueAccess ? await venueAccess.ListAllVenueIdsAsync(tenantContext.TenantId, cancellationToken)
+            : await venueAccess.ListAssignedAsync(tenantContext.TenantId, tenantContext.TenantUserId, cancellationToken);
         return new MeResponse(
             me.UserId,
             me.Email,
@@ -108,7 +113,7 @@ public sealed class AuthController(AuthService auth, IOptions<CorsSettings> cors
             me.Roles,
             me.Permissions,
             me.Memberships.Select(Map).ToList(),
-            [],
+            venueIds,
             tenantContext.HasAllVenueAccess);
     }
 

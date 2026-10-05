@@ -122,6 +122,28 @@ public sealed class DbSession(NpgsqlDataSource dataSource) : IUnitOfWork, IAsync
         return await connection.QueryMultipleAsync(Command(sql, parameters, cancellationToken));
     }
 
+    /// <summary>
+    /// Runs a DELETE inside a savepoint. Returns false (and rolls back to the savepoint, keeping the transaction usable)
+    /// when a foreign key still references the row, so callers can deactivate instead.
+    /// </summary>
+    public async Task<bool> TryDeleteAsync(string sql, object? parameters, CancellationToken cancellationToken)
+    {
+        var transaction = _transaction ?? throw new InvalidOperationException("TryDeleteAsync requires an active transaction.");
+        const string savepoint = "try_delete";
+        await transaction.SaveAsync(savepoint, cancellationToken);
+        try
+        {
+            await ExecuteAsync(sql, parameters, cancellationToken);
+            await transaction.ReleaseAsync(savepoint, cancellationToken);
+            return true;
+        }
+        catch (PostgresException ex) when (ex.SqlState is PostgresErrorCodes.ForeignKeyViolation or PostgresErrorCodes.RestrictViolation)
+        {
+            await transaction.RollbackAsync(savepoint, cancellationToken);
+            return false;
+        }
+    }
+
     private CommandDefinition Command(string sql, object? parameters, CancellationToken cancellationToken) =>
         new(sql, parameters, _transaction, commandTimeout: 30, cancellationToken: cancellationToken);
 

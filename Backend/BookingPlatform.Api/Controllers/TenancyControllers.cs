@@ -2,6 +2,7 @@ using BookingPlatform.Api.Security;
 using BookingPlatform.Application.Common.Pagination;
 using BookingPlatform.Application.Common.Security;
 using BookingPlatform.Application.Tenancy;
+using BookingPlatform.Application.Venues;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BookingPlatform.Api.Controllers;
@@ -50,6 +51,12 @@ public sealed class StaffController(StaffService staff) : ControllerBase
     [HasPermission(Permissions.StaffManage)]
     public Task<StaffMemberDto> UpdateRoles(Guid tenantUserId, UpdateStaffRolesRequest request, CancellationToken cancellationToken) =>
         staff.UpdateRolesAsync(tenantUserId, request, cancellationToken);
+
+    /// <summary>Replaces the venues a member may access (owners and admins always access every venue).</summary>
+    [HttpPut("{tenantUserId:guid}/venues")]
+    [HasPermission(Permissions.StaffManage)]
+    public Task<StaffMemberDto> UpdateVenues(Guid tenantUserId, UpdateStaffVenuesRequest request, CancellationToken cancellationToken) =>
+        staff.UpdateVenuesAsync(tenantUserId, request, cancellationToken);
 
     [HttpPost("{tenantUserId:guid}/deactivate")]
     [HasPermission(Permissions.StaffManage)]

@@ -41,7 +41,11 @@ builder.Services.AddExceptionHandler<AppExceptionHandler>();
 
 builder.Services
     .AddControllers(options => options.ModelMetadataDetailsProviders.Add(new SystemTextJsonValidationMetadataProvider()))
-    .AddJsonOptions(options => options.JsonSerializerOptions.MaxDepth = 32);
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.MaxDepth = 32;
+        options.JsonSerializerOptions.Converters.Add(new TimeOnlyJsonConverter());
+    });
 builder.Services.AddPlatformSwagger();
 
 builder.Services.AddPlatformForwardedHeaders(builder.Configuration);

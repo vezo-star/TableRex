@@ -12,7 +12,9 @@ public sealed class StaffRepository(DbSession db) : IStaffRepository
                COALESCE((SELECT array_agg(r.code ORDER BY r.code)
                          FROM tenant_user_roles tur JOIN roles r ON r.id = tur.role_id
                          WHERE tur.tenant_user_id = tu.id), '{}') AS roles,
-               '{}'::uuid[] AS venue_ids
+               COALESCE((SELECT array_agg(tuv.venue_id ORDER BY tuv.venue_id)
+                         FROM tenant_user_venues tuv
+                         WHERE tuv.tenant_id = tu.tenant_id AND tuv.tenant_user_id = tu.id), '{}') AS venue_ids
         FROM tenant_users tu
         JOIN users u ON u.id = tu.user_id
         """;

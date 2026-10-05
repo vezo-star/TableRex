@@ -1,5 +1,6 @@
 using BookingPlatform.Application.Identity;
 using BookingPlatform.Application.Tenancy;
+using BookingPlatform.Application.Venues;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -14,6 +15,10 @@ public static class DependencyInjection
         services.AddScoped<AuthService>();
         services.AddScoped<TenantService>();
         services.AddScoped<StaffService>();
+        services.AddScoped<IVenueAccessGuard, VenueAccessGuard>();
+        services.AddScoped<VenueService>();
+        services.AddScoped<ResourceService>();
+        services.AddScoped<FloorPlanService>();
 
         return services;
     }

@@ -48,15 +48,28 @@ public sealed class DevSeeder(ILogger<DevSeeder> logger)
         await EnsureMembershipAsync(connection, transaction, demoTenantId, adminId, "TENANT_OWNER", cancellationToken);
         await EnsureMembershipAsync(connection, transaction, secondTenantId, adminId, "TENANT_OWNER", cancellationToken);
 
+        var staffMemberships = new Dictionary<string, Guid>();
         foreach (var (localPart, name, role) in DemoStaff)
         {
             var userId = await EnsureUserAsync(connection, transaction, $"{localPart}@{domain}", name, passwordHash, false, cancellationToken);
-            await EnsureMembershipAsync(connection, transaction, demoTenantId, userId, role, cancellationToken);
+            staffMemberships[localPart] = await EnsureMembershipAsync(connection, transaction, demoTenantId, userId, role, cancellationToken);
         }
+
+        var db = new SeedDb(connection, transaction, cancellationToken);
+        var restaurantId = await DemoVenues.EnsureRestaurantAsync(db, demoTenantId);
+        var clubId = await DemoVenues.EnsureClubAsync(db, demoTenantId);
+        await DemoVenues.EnsureWorkspaceAsync(db, secondTenantId);
+
+        foreach (var localPart in new[] { "manager", "host", "staff", "viewer" })
+        {
+            await DemoVenues.AssignAsync(db, demoTenantId, staffMemberships[localPart], restaurantId);
+        }
+
+        await DemoVenues.AssignAsync(db, demoTenantId, staffMemberships["manager"], clubId);
 
         await transaction.CommitAsync(cancellationToken);
         logger.LogInformation(
-            "Dev seed complete: tenants {DemoTenant} and {SecondTenant}; admin {AdminEmail}; staff manager/host/staff/viewer@{Domain}",
+            "Dev seed complete: tenants {DemoTenant} and {SecondTenant} with demo venues; admin {AdminEmail}; staff manager/host/staff/viewer@{Domain}",
             DemoTenantSlug, SecondTenantSlug, options.AdminEmail, domain);
     }
 
@@ -96,7 +109,7 @@ public sealed class DevSeeder(ILogger<DevSeeder> logger)
         return (Guid)(await command.ExecuteScalarAsync(cancellationToken))!;
     }
 
-    private static async Task EnsureMembershipAsync(
+    private static async Task<Guid> EnsureMembershipAsync(
         NpgsqlConnection connection, NpgsqlTransaction transaction, Guid tenantId, Guid userId, string roleCode, CancellationToken cancellationToken)
     {
         await using var command = new NpgsqlCommand(
@@ -105,17 +118,20 @@ public sealed class DevSeeder(ILogger<DevSeeder> logger)
                 INSERT INTO tenant_users (tenant_id, user_id) VALUES (@tenantId, @userId)
                 ON CONFLICT (tenant_id, user_id) DO UPDATE SET tenant_id = EXCLUDED.tenant_id
                 RETURNING id
+            ),
+            role_link AS (
+                INSERT INTO tenant_user_roles (tenant_id, tenant_user_id, role_id)
+                SELECT @tenantId, m.id, r.id FROM membership m CROSS JOIN roles r
+                WHERE r.tenant_id IS NULL AND r.code = @role
+                ON CONFLICT DO NOTHING
             )
-            INSERT INTO tenant_user_roles (tenant_id, tenant_user_id, role_id)
-            SELECT @tenantId, m.id, r.id FROM membership m CROSS JOIN roles r
-            WHERE r.tenant_id IS NULL AND r.code = @role
-            ON CONFLICT DO NOTHING
+            SELECT id FROM membership
             """,
             connection,
             transaction);
         command.Parameters.AddWithValue("tenantId", tenantId);
         command.Parameters.AddWithValue("userId", userId);
         command.Parameters.AddWithValue("role", roleCode);
-        await command.ExecuteNonQueryAsync(cancellationToken);
+        return (Guid)(await command.ExecuteScalarAsync(cancellationToken))!;
     }
 }

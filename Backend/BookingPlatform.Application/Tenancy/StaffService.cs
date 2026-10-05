@@ -6,6 +6,7 @@ using BookingPlatform.Application.Common.Security;
 using BookingPlatform.Application.Common.Time;
 using BookingPlatform.Application.Common.Validation;
 using BookingPlatform.Application.Identity;
+using BookingPlatform.Application.Venues;
 using BookingPlatform.Domain.Identity;
 using FluentValidation;
 
@@ -26,7 +27,9 @@ public sealed class StaffService(
     ICurrentUser currentUser,
     IValidator<CreateStaffRequest> createValidator,
     IValidator<UpdateStaffRolesRequest> rolesValidator,
-    IValidator<StaffQuery> queryValidator)
+    IValidator<StaffQuery> queryValidator,
+    IVenueAccessRepository venueAccess,
+    IValidator<UpdateStaffVenuesRequest> venuesValidator)
 {
     private const string NotFoundMessage = "The staff member was not found.";
 
@@ -116,6 +119,32 @@ public sealed class StaffService(
 
         accessCache.Invalidate(result.UserId, tenantId);
         return result;
+    }
+
+    /// <summary>Replaces the venues assigned to a member (D-018). Owners and admins access every venue regardless.</summary>
+    public async Task<StaffMemberDto> UpdateVenuesAsync(Guid tenantUserId, UpdateStaffVenuesRequest request, CancellationToken cancellationToken)
+    {
+        await venuesValidator.EnsureValidAsync(request, cancellationToken);
+        var tenantId = tenantContext.TenantId;
+        var requested = request.VenueIds.Distinct().ToList();
+
+        return await unitOfWork.ExecuteAsync(async () =>
+        {
+            var member = await staff.GetAsync(tenantId, tenantUserId, cancellationToken)
+                ?? throw new NotFoundAppException(ErrorCodes.StaffNotFound, NotFoundMessage);
+
+            var tenantVenues = (await venueAccess.ListAllVenueIdsAsync(tenantId, cancellationToken)).ToHashSet();
+            if (requested.Any(id => !tenantVenues.Contains(id)))
+            {
+                throw new ValidationAppException("venueIds", "One or more venues were not found.");
+            }
+
+            await venueAccess.ReplaceAssignmentsAsync(tenantId, tenantUserId, requested, cancellationToken);
+            await audit.WriteAsync(new AuditEntry(tenantId, "tenant_user", tenantUserId, AuditActions.VenuesChanged,
+                new { venueIds = member.VenueIds }, new { venueIds = requested.Order().ToList() }), cancellationToken);
+
+            return (await staff.GetAsync(tenantId, tenantUserId, cancellationToken))!;
+        }, cancellationToken);
     }
 
     public Task<StaffMemberDto> DeactivateAsync(Guid tenantUserId, CancellationToken cancellationToken) =>

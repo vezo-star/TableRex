@@ -12,6 +12,8 @@ using BookingPlatform.Infrastructure.RateLimiting;
 using BookingPlatform.Infrastructure.Security;
 using BookingPlatform.Infrastructure.Tenancy;
 using BookingPlatform.Application.Tenancy;
+using BookingPlatform.Application.Venues;
+using BookingPlatform.Infrastructure.Venues;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -74,6 +76,11 @@ public static class DependencyInjection
         services.AddScoped<IStaffRepository, StaffRepository>();
         services.AddScoped<IRoleRepository, RoleRepository>();
         services.AddSingleton<ITenantAccessCache, TenantAccessCache>();
+
+        services.AddScoped<IVenueRepository, VenueRepository>();
+        services.AddScoped<IVenueAccessRepository, VenueAccessRepository>();
+        services.AddScoped<IResourceRepository, ResourceRepository>();
+        services.AddScoped<IFloorPlanRepository, FloorPlanRepository>();
 
         return services;
     }
