@@ -142,6 +142,10 @@ Stored as typed columns on `venues` (not JSON), with sensible defaults:
 | max_advance_days (public) | 90 |
 | hold_ttl_seconds | 300 |
 | auto_confirm_public_bookings | true |
+| public_booking_enabled | true |
+| public_cancellation_cutoff_minutes (0–10080) | 120 |
+
+Public bookings additionally: start on the slot grid of their period, use the default duration, are assigned only online-bookable resources/combinations, and a guest may hold at most `PublicBooking:MaxActiveBookingsPerContact` (3) upcoming active bookings per venue. Guests may cancel `PENDING`/`HELD`/`CONFIRMED` bookings online until `starts_at − public_cancellation_cutoff_minutes`.
 
 Staff with `booking.create` may override public-only limits (lead time, max party) but never operating hours unless explicitly flagged as an out-of-hours booking (deferred) — and never the allocation constraint.
 
@@ -189,4 +193,4 @@ Inputs: venue, business date, party size, duration (default from venue), optiona
 
 ## 10. Booking reference
 
-Format `BK-{yyyyMMdd}-{n}` where the date is the venue-local business date and `n` comes from a global PostgreSQL sequence, zero-padded to 6 digits (grows as needed). Unique constraint on `reference`. The reference is not a secret: public confirmation/manage links use a separate random token (stored hashed).
+Format `BK-{yyyyMMdd}-{n}` where the date is the venue-local business date and `n` comes from a global PostgreSQL sequence, zero-padded to 6 digits (grows as needed). Unique constraint on `reference`. The reference is not a secret: public confirmation/manage links use a separate unguessable token (an HMAC of the booking id under a dedicated key, stored hashed — D-066).

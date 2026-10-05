@@ -74,23 +74,42 @@ OWNER vs ADMIN difference: ownership transfer and tenant deletion/suspension req
 ## 5. Transport, headers, CORS
 
 - HTTPS only outside development; HSTS.
-- Headers: `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY` for the API and staff app, a strict `Content-Security-Policy` for the SPA (served by nginx). The public booking widget's framing policy is decided in Phase 8 (`frame-ancestors` allow-list per tenant).
+- Headers: `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY` for the API and staff app, a strict `Content-Security-Policy` for the SPA (served by nginx). The public booking pages are served by the same SPA under the same headers, so they cannot be framed; venues link or button to `/book/{tenantSlug}/{venueSlug}` instead of embedding an iframe (D-072). A per-tenant `frame-ancestors` allow-list can be added later without API changes.
 - CORS: explicit origins per environment from configuration, credentials allowed only for those origins. No wildcard with credentials.
 
 ## 6. Rate limiting & abuse (Phase 2 for auth, Phase 8 for public)
 
 - Login: per IP and per account.
-- Public availability: per IP + per venue, generous.
-- Public booking/holds: per IP + per contact, strict; idempotency required.
+- Public endpoints (implemented in Phase 8), Redis fixed-window counters per client IP:
+
+  | Policy | Endpoints | Default |
+  |---|---|---|
+  | `public-read` | venue details, availability | 120 per 60 s |
+  | `public-booking` | create booking | 10 per 600 s |
+  | `public-manage` | view booking by token | 60 per 60 s |
+  | `public-cancel` | cancel booking by token | 10 per 600 s |
+
+  Each can be tuned per environment with `RateLimiting__Policies__{policy}__PermitLimit` and `RateLimiting__Policies__{policy}__WindowSeconds`. Exceeding a limit returns 429 `RATE_LIMITED` with `Retry-After`.
+- Per contact: at most 5 public booking attempts per email per hour (counter keyed by SHA-256 of the normalised email, so the address is not stored in Redis), and at most `PublicBooking__MaxActiveBookingsPerContact` (default 3) upcoming active bookings per email per venue (422 `CONTACT_BOOKING_LIMIT`).
+- Idempotency is required on public booking creation.
 - Redis-backed counters so limits hold across instances; fallback to in-memory per instance if Redis is unavailable.
 - Staff endpoints: no aggressive limits (authenticated, per-user ceilings only to stop runaway clients).
+
+### Public booking (Phase 8)
+
+- **Manage token.** `base64url(HMAC-SHA256(PublicBooking:TokenKey, "booking:" + bookingId))` — 256 bits, unguessable without the key. Only `SHA-256(token)` is stored (`bookings.public_token_hash`, unique), so a database leak does not expose working links. The idempotency store keeps the confirmation with `manageToken = null`; a replay re-derives the token from the booking id. The key is dedicated (not the JWT signing key) so the Worker can build email links (Phase 9) without being able to mint access tokens. Rotating the key invalidates every outstanding manage link.
+- **Token transport.** The API only accepts the token in the `X-Booking-Token` header, never in a path or query string, so it does not reach access logs, proxies or analytics. The SPA link is `/booking/manage#<token>`; URL fragments are never sent to servers or in `Referer`. Request logging records method, path and status only, never headers.
+- **Bot defence.** A hidden `website` honeypot field must be empty, plus strict per-IP and per-contact limits. No CAPTCHA (no third-party script or tracking on guest pages); revisit if abuse is observed (D-070).
+- **Data minimisation.** Public responses contain no internal ids, resource or table names, staff, notes or customer records. The manage view shows only the guest's first name and their own special requests. An existing customer with the same email is reused but never updated from the public form, so a third party cannot overwrite a customer's details by booking with their email.
+- **Uniform 404.** Unknown slugs, inactive or suspended tenants, inactive venues and venues with online booking off all return the same 404 `VENUE_NOT_FOUND`; unknown and malformed tokens return the same 404 `BOOKING_NOT_FOUND`.
+- **Audit.** Public creations and cancellations are audited with `user_id = NULL`, the caller's IP and user agent; status history uses source `PUBLIC`.
 
 ## 7. Secrets & configuration
 
 - No secrets in source control. `.env.example` / `appsettings*.json` contain placeholders only.
 - Development: `dotnet user-secrets` or `.env` (git-ignored). Production: platform secret store injected as env vars.
-- Secrets: `Jwt__SigningKey`, `ConnectionStrings__Postgres`, `ConnectionStrings__Redis`, `DEV_ADMIN_PASSWORD` (dev only), notification/payment provider keys (later).
-- Startup fails fast if required secrets are missing or too weak (e.g. signing key < 32 bytes).
+- Secrets: `Jwt__SigningKey`, `PublicBooking__TokenKey`, `ConnectionStrings__Postgres`, `ConnectionStrings__Redis`, `DEV_ADMIN_PASSWORD` (dev only), notification/payment provider keys (later).
+- Startup fails fast if required secrets are missing or too weak (signing key and public booking token key < 32 bytes or still a `change-me` placeholder).
 
 ## 8. Logging & sensitive data
 

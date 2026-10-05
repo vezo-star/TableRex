@@ -157,6 +157,26 @@ Changing an Accepted decision requires the stop-and-explain process in `AGENTS.m
 
 **D-065 — WebSockets only, no negotiation.** Accepted. Client uses `skipNegotiation` + WebSockets; the server only enables WebSockets. No sticky sessions are needed behind a load balancer, and the token travels once in the WebSocket upgrade URL (`access_token`, accepted only on `/hubs/*`, never logged). Long polling/SSE can be enabled later together with sticky sessions if a client environment requires it.
 
+## Phase 8 implementation decisions (2026-10-05)
+
+**D-066 — Manage tokens are HMACs of the booking id under a dedicated key; only their hash is stored.** Accepted. `token = base64url(HMAC-SHA256(PublicBooking:TokenKey, "booking:" + id))`, stored as `SHA-256(token)` in `bookings.public_token_hash`. Deriving instead of storing a random value lets an idempotent replay return the same link without persisting the token anywhere (the idempotency response stores `manageToken = null`) and lets the Worker regenerate links for emails. A dedicated key (not the JWT signing key) keeps the Worker unable to mint access tokens. Trade-off: individual links cannot be revoked separately; rotating the key revokes all.
+
+**D-067 — The manage token travels in a header and a URL fragment, never in a path or query.** Accepted. API: `X-Booking-Token` on `GET /public/booking` and `POST /public/booking/cancel`. SPA: `/booking/manage#<token>`. Paths and query strings end up in access logs, proxies and `Referer`; headers and fragments do not. This replaces the planned `/public/bookings/{publicToken}` routes.
+
+**D-068 — No public holds in Phase 8.** Accepted. The guest form is a single step after choosing a time, so the slot is claimed at submission and a lost race returns 409 with fresh times. Anonymous holds would let bots starve inventory (R10) for little benefit; the staff hold flow remains. Revisit together with deposits in Phase 10, where a payment step justifies a short hold.
+
+**D-069 — Public bookings use the staff engine with an online-only filter.** Accepted. `PublicBookingService` resolves the tenant from slugs, then calls the internal `BookingService.CreateCoreAsync` with `OnlineOnly`, so AUTO allocation and public availability consider only `is_bookable_online` resources and combinations. Same transaction, exclusion constraint, history, audit and outbox as staff bookings; source `PUBLIC`, history source `PUBLIC`, `created_by = NULL`. Guest cancellation goes through `TransitionCoreAsync` with a precondition evaluated on the locked row (status and cutoff), so a concurrent staff change cannot be overwritten.
+
+**D-070 — Honeypot plus rate limits instead of a CAPTCHA.** Accepted. A hidden `website` field must be empty; per-IP policies and a per-email limit (5/hour) cap automated abuse. No third-party challenge script or tracking on guest pages. Add a challenge provider behind an interface if real abuse appears.
+
+**D-071 — Guest contact rules: reuse by email, never update, cap active bookings.** Accepted. The email identifies the customer within the tenant; an existing customer is linked but their stored name, phone and consent are not changed from the anonymous form (anyone can type anyone's email). Marketing consent is recorded only when a new customer is created. At most `PublicBooking:MaxActiveBookingsPerContact` (default 3) upcoming active bookings per email per venue.
+
+**D-072 — Guests book on the platform's own pages; no iframe widget yet.** Accepted. Public pages live in the same SPA (`/book/{tenantSlug}/{venueSlug}`) behind the same `X-Frame-Options: DENY`/CSP, and venues link to them. A framed widget needs a per-tenant `frame-ancestors` allow-list and third-party cookie considerations; it can be added without API changes.
+
+**D-073 — Public times follow the venue's slot grid and lead time.** Accepted. The API offers and accepts only start times on the slot grid of the containing period, at or after `now + minLeadTimeMinutes`, within `maxAdvanceDays`, for the venue's default duration. Off-grid times are 400; inside the lead time is 422 `OUTSIDE_BOOKING_WINDOW`.
+
+**D-074 — Rate-limit policies are configurable per environment.** Accepted. `[RateLimit(policy, limit, window)]` defaults can be overridden with `RateLimiting:Policies:{policy}:PermitLimit` / `WindowSeconds`, so production can tune limits without a release and integration tests can raise them for race tests.
+
 ## Risk register
 
 | # | Risk | Impact | Mitigation |
@@ -170,7 +190,7 @@ Changing an Accepted decision requires the stop-and-explain process in `AGENTS.m
 | R7 | Package licensing changes (FluentAssertions, MediatR, AutoMapper precedent) | Legal/cost exposure | Avoid those libs; review licenses when adding packages |
 | R8 | Hosting provider lacks PG 18 / `btree_gist` | Deployment blocked | Fallback PG 17 + app UUIDv7; verify provider in Phase 12 planning |
 | R9 | Idempotency key reuse across callers | Wrong response returned | Scope keys by operation + caller; request hash check |
-| R10 | Public booking abuse (bots holding inventory) | Inventory starvation | Rate limits, short hold TTL, per-contact caps, optional bot challenge |
+| R10 | Public booking abuse (bots holding inventory) | Inventory starvation | No anonymous holds (D-068), per-IP and per-email limits, active-booking cap per contact, honeypot (D-070) |
 | R11 | Realtime missed events | Stale boards | Resync on reconnect/visibility, version checks, outbox at-least-once |
 | R12 | Testcontainers needs Docker in CI and locally | Tests can't run | GitLab runner with Docker; Docker Desktop must be running locally |
 | R13 | Scope creep (payments/SaaS) before engine is proven | Unstable core | Phase gates; payments only after Phase 5–9 stable |

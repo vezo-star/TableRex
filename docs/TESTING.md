@@ -1,6 +1,6 @@
 # Testing
 
-Status: **Phase 1 — harness implemented.** Each phase adds the tests listed for it; a phase is not complete while any test fails.
+Status: **Phases 1–8 implemented** (241 backend tests, 184 Vitest tests at the end of Phase 8). Each phase adds the tests listed for it; a phase is not complete while any test fails.
 
 ## 0. Running the suites
 
@@ -108,6 +108,19 @@ Implemented in Phase 7:
 - `Outbox/OutboxDispatcherTests.cs`: success, retry with backoff, dead-letter after max attempts, permanent failure dead-letters at once, expired lease reclaimed, stale rows skipped. `OutboxRetryPolicyTests` (unit): exponential growth, jitter bounds, cap.
 - Vitest: `stores/realtime.spec.js` (no connection without a session, connect + join + resync, token refresh near expiry, dedup + other-venue filter, rejoin + resync after reconnect, retry backoff until stopped, venue switch + denied join, hidden-tab resync), `services/realtimeService.spec.js`, `composables/useRealtimeRefresh.spec.js`, plus board/drawer/layout updates (refetch rules, remote-change banner, indicator).
 - Two-session browser check done manually (Phase 7); automated as Playwright in Phase 12.
+
+## 6a. Public booking tests (Phase 8)
+
+`PublicBooking/PublicBookingTests.cs` (the `public-booking` per-IP limit is raised to 1000 in this class via `RateLimiting:Policies`):
+- **Venue and times without leaks**: response fields are whitelisted (no ids, resources, notes); an offline-only table is not offered; party size / date window validation; unknown, malformed, inactive-venue, online-booking-off and suspended-tenant all give 404 `VENUE_NOT_FOUND`.
+- **Book → replay → manage → cancel**: 201 with a manage token; the database row has source `PUBLIC`, no creator, the token's SHA-256 and the online table (T2) when the first table is offline-only; the idempotency row never contains the token; replay returns the same booking and token with `Idempotent-Replayed`; changed body → 409 `IDEMPOTENCY_CONFLICT`; missing key → 400; GET/cancel by `X-Booking-Token` (missing or wrong token → 404); cancel is idempotent; history `PUBLIC` with the guest reason, outbox rows, audit with `user_id NULL`.
+- **Venue rules**: off-grid time 400, outside hours 422, party size 400, honeypot 400, invalid email 400, beyond the booking window 400, inside the lead time 422 `OUTSIDE_BOOKING_WINDOW`, fourth active booking for one email 422 `CONTACT_BOOKING_LIMIT` (one customer row, reused case-insensitively), `PENDING` when auto-confirm is off.
+- **Cancellation policy**: inside the cutoff → 422 `CANCELLATION_NOT_ALLOWED`; with cutoff 0 a checked-in booking still cannot be cancelled online.
+- **A/B race**: 2 guests for the last online table → one 201 and one 409; 20 guests for one slot → exactly one; a staff booking and a guest booking racing for the same table → exactly one; `BookingInvariants` (no overlapping active allocations, no orphans) after each round.
+
+`PublicBookingRateLimitTests` (`public-read` set to 3 per window): the fourth read → 429 `RATE_LIMITED` with `Retry-After`.
+
+Vitest: `services/publicBookingService.spec.js` (anonymous calls, token only in the header, fragment links), `utils/publicBooking.spec.js`, `pages/publicBookingPages.spec.js` (times, closed/empty states, booking and confirmation link, slot taken → times reloaded, idempotency key reused after a network failure, 404 venue, manage page: missing fragment, load + confirm cancel, contact-venue state). Mobile (360 px) browser walkthrough done in Phase 8: book → confirmation → manage link → cancel, and online booking toggled off/on from venue settings; Playwright in Phase 12.
 
 ## 7. Frontend tests
 

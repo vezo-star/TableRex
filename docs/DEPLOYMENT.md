@@ -30,6 +30,9 @@ Status: **Phase 1 — local development and container images implemented.** Prod
 | `Auth__RefreshTokenDays`, `Auth__RefreshTokenAbsoluteDays`, `Auth__LockoutThreshold`, `Auth__LockoutBaseMinutes`, `Auth__LockoutMaxMinutes` | Api | Session and lockout tuning (defaults 14, 30, 5, 1, 60) |
 | `ReverseProxy__TrustedNetworks__N` | Api | CIDRs of the reverse proxies whose `X-Forwarded-For/Proto` are trusted (e.g. `10.0.0.0/8`). Empty = only loopback. Required behind a proxy, otherwise rate limits key on the proxy IP. |
 | `RateLimiting__KeyPrefix` | Api | Redis key prefix for rate-limit counters (default `rl`); set per environment when sharing one Redis |
+| `RateLimiting__Policies__{policy}__PermitLimit`, `RateLimiting__Policies__{policy}__WindowSeconds` | Api | Optional per-IP overrides for `public-read` (120/60 s), `public-booking` (10/600 s), `public-manage` (60/60 s), `public-cancel` (10/600 s) and the auth policies |
+| `PublicBooking__TokenKey` | Api (Worker from Phase 9) | **Required secret.** ≥32 random bytes (base64), different from `Jwt__SigningKey`; startup fails if missing, short or a placeholder. Signs guest manage links; rotating it invalidates every outstanding link. |
+| `PublicBooking__MaxActiveBookingsPerContact` | Api | Upcoming active public bookings allowed per email per venue (default 3, 1–100) |
 | `DEV_ADMIN_EMAIL`, `DEV_ADMIN_PASSWORD` | Migrations `seed-dev` | Development only; password ≥12 chars. `seed-dev` refuses to run when `DOTNET_ENVIRONMENT=Production`. |
 
 PostgreSQL connections default to `GSS Encryption Mode=Disable` unless the connection string sets it: the platform uses password authentication, and the .NET runtime images do not ship the Kerberos library that Npgsql otherwise probes for.

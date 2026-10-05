@@ -17,7 +17,7 @@ The next phase starts only after the explicit instruction **"PROCEED TO NEXT PHA
 | 5 | Core Booking Engine | **Complete** (2026-10-05) |
 | 6 | Internal Staff Experience | **Complete** (2026-10-05) |
 | 7 | Real-time | **Complete** (2026-10-05) |
-| 8 | Public Booking | Not started |
+| 8 | Public Booking | **Complete** (2026-10-05) |
 | 9 | Outbox & Notifications | Not started |
 | 10 | Payments (abstractions) | Not started |
 | 11 | SaaS Features | Not started |
@@ -137,6 +137,13 @@ Completion notes (2026-10-05):
 Build: public controllers/DTOs, public availability (times only), public holds (optional), public booking via `BookingService`, public confirmation by token, customer cancellation per policy, Redis-backed rate limiting, abuse controls, PublicBookingPage + BookingConfirmationPage (mobile-first), embeddable widget approach decision.
 
 Acceptance: a customer can book without staff access; public booking uses the same engine; double-booking protection proven for public flow (A/B race test); public responses contain no internal data (contract tests).
+
+Completion notes (2026-10-05):
+- Backend: V028 (`public_booking_enabled`, `public_cancellation_cutoff_minutes`); `PublicBookingController` (venue, availability, create, view and cancel by `X-Booking-Token`); `PublicBookingService` on top of the shared `BookingService.CreateCoreAsync`/`TransitionCoreAsync` with online-only allocation; HMAC manage tokens under the new required secret `PublicBooking__TokenKey` (only the hash stored, re-derived on replay); honeypot, slot-grid, lead-time, window and party-size rules; per-email attempt limit and active-booking cap; four configurable per-IP rate-limit policies. Release build 0 warnings; 241 backend tests green (new: 5 `PublicBookingTests` incl. 2-guest, 20-guest and staff-vs-guest races, 1 `PublicBookingRateLimitTests`).
+- Frontend: `/book/{tenantSlug}/{venueSlug}` (mobile-first: date, guests, time grid, guest details, honeypot, stable idempotency key, taken-slot recovery, confirmation with private manage link) and `/booking/manage#token` (details, cancel with confirmation, contact-venue state) in `PublicLayout`; venue settings gain "Accept online bookings", "Online cancel cutoff" and the shareable public link. 184 Vitest tests green (18 new), ESLint/Prettier clean, `quasar build` succeeds.
+- Browser check at 360 px: Monday shown as closed; Tuesday 19:00 for 2 booked as a throwaway guest → `BK-20261006-000005` confirmed on Table 1 (online table) with source `PUBLIC`; manage link opened, cancel deadline 17:00 shown, cancelled with confirmation (history `PUBLIC`, "Cancelled by the guest online."); turning online booking off in venue settings made the public endpoint 404 and the banner switch; turned back on.
+- Not built: public holds (D-068) and an iframe widget (D-072).
+- Decisions: D-066 – D-074.
 
 ## Phase 9 — Outbox & Notifications
 

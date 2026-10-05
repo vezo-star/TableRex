@@ -1,6 +1,6 @@
 # API
 
-Status: **Phases 1–5 implemented** (health, auth, tenancy, staff, venues, resources, availability, bookings, holds, blocks); later sections are the planned surface. Each endpoint is marked with the phase that implements it. This document and Swagger must match the real implementation once built.
+Status: **Phases 1–8 implemented** (health, auth, tenancy, staff, venues, resources, availability, bookings, holds, blocks, board, customers, audit, SignalR, public booking); later sections are the planned surface. Each endpoint is marked with the phase that implements it. This document and Swagger must match the real implementation once built.
 
 ## 1. Conventions
 
@@ -52,6 +52,9 @@ Public endpoints never include internal ids such as `conflictingResourceIds`.
 | INVALID_BOOKING_TIME | 422 |
 | PARTY_SIZE_NOT_SUPPORTED | 422 |
 | OUTSIDE_OPERATING_HOURS | 422 |
+| OUTSIDE_BOOKING_WINDOW | 422 |
+| CONTACT_BOOKING_LIMIT | 422 |
+| CANCELLATION_NOT_ALLOWED | 422 |
 | UNAUTHORIZED | 401 |
 | INVALID_CREDENTIALS | 401 |
 | ACCOUNT_LOCKED | 423 |
@@ -279,22 +282,50 @@ Newest first, tenant-scoped, keyset-paged: `{ items: [{ id, entityType, entityId
 |---|---|---|
 | GET | `/api/v1/reports/...` | reports.view |
 
-## 4. Public API (Phase 8)
+## 4. Public API (Phase 8 — implemented)
 
-Separate controllers and DTOs; never return internal notes, staff data, customer records, or internal ids beyond what's needed.
+`PublicBookingController` (anonymous) with its own DTOs. Responses never contain internal ids, resource/table names, staff, notes or customer records. A venue is reachable only when the tenant is `ACTIVE`, the venue is `ACTIVE` and `rules.publicBookingEnabled` is true; anything else (unknown slugs, malformed slugs, suspended tenant, inactive venue, online booking off) is the same 404 `VENUE_NOT_FOUND`.
 
-| Method | Path | Notes |
-|---|---|---|
-| GET | `/api/v1/public/{tenantSlug}/{venueSlug}` | Name, description, time zone, party size limits, booking window, sections offered online |
-| GET | `/api/v1/public/{tenantSlug}/{venueSlug}/availability?date&partySize[&time]` | Available times only (optionally section names) — no resource ids |
-| POST | `/api/v1/public/{tenantSlug}/{venueSlug}/holds` | Optional short hold during checkout (Idempotency-Key, rate-limited) |
-| POST | `/api/v1/public/{tenantSlug}/{venueSlug}/bookings` | Idempotency-Key; server auto-assigns resources via the same `BookingService` with source `WEBSITE`/`WIDGET` |
-| GET | `/api/v1/public/bookings/{publicToken}` | Confirmation view using an unguessable token |
-| POST | `/api/v1/public/bookings/{publicToken}/cancel` | Customer cancellation within venue policy (Phase 8/9) |
+| Method | Path | Rate-limit policy (per IP) | Notes |
+|---|---|---|---|
+| GET | `/api/v1/public/{tenantSlug}/{venueSlug}` | `public-read` 120/min | Venue name, description, address, contact, `timeZone`, party size limits, `durationMinutes`, `minLeadTimeMinutes`, `today`, `lastBookableDate`, `cancellationCutoffMinutes`, `autoConfirm` |
+| GET | `/api/v1/public/{tenantSlug}/{venueSlug}/availability?date&partySize` | `public-read` 120/min | `{ date, timeZone, partySize, durationMinutes, isClosed, times: [{ time, startsAt }] }` — only bookable times, computed on online-bookable resources and combinations, honouring lead time |
+| POST | `/api/v1/public/{tenantSlug}/{venueSlug}/bookings` | `public-booking` 10 per 10 min | `Idempotency-Key` required; 201 with `Cache-Control: no-store`; replay adds `Idempotent-Replayed: true` |
+| GET | `/api/v1/public/booking` | `public-manage` 60/min | Header `X-Booking-Token: <manage token>` |
+| POST | `/api/v1/public/booking/cancel` | `public-cancel` 10 per 10 min | Header `X-Booking-Token`; cancels within the venue's online cutoff |
 
-Public booking request: date, time, party size, first/last name, email, phone, special requests, consent flags. Response: reference, venue-local date/time, party size, status, public token link.
+Request body for `POST .../bookings`:
 
-Abuse controls: rate limits per IP and per venue, payload size limits, optional bot challenge (decision deferred to Phase 8), email/phone format validation, max active future bookings per contact (configurable).
+```json
+{
+  "date": "2026-10-09", "time": "19:00", "partySize": 2,
+  "firstName": "Ada", "lastName": "Lovelace", "email": "ada@example.com", "phone": "+27 21 555 0101",
+  "specialRequests": "Window seat", "marketingConsent": false, "website": null
+}
+```
+
+- `website` is a honeypot: it must be empty (bots that fill every field get 400 `VALIDATION_ERROR`).
+- Validation (400): first name 1–100, last name ≤100, valid email ≤254, phone ≤40 with 4–20 digits, special requests ≤1000, party size within the venue's min/max, `date` between `today` and `lastBookableDate` (venue-local), `time` on the venue's slot grid.
+- Business rules (422): `OUTSIDE_OPERATING_HOURS`, `OUTSIDE_BOOKING_WINDOW` (inside the minimum lead time), `CONTACT_BOOKING_LIMIT` (the email already has `PublicBooking:MaxActiveBookingsPerContact` (default 3) upcoming active bookings at this venue), `PARTY_SIZE_NOT_SUPPORTED`. Taken slot: 409 `RESOURCE_NOT_AVAILABLE`.
+- Per-contact limit: at most 5 booking attempts per email per hour (429 `RATE_LIMITED` with `Retry-After`).
+- Resources are assigned by the same engine as staff bookings (`AUTO` over online-bookable resources and combinations; the exclusion constraint decides races). Source `PUBLIC`; status `CONFIRMED` when `autoConfirmPublicBookings`, else `PENDING`. An existing customer with the same email is reused unchanged; marketing consent is stored only for new customers.
+
+201 response:
+
+```json
+{
+  "reference": "BK-20261009-000042", "status": "CONFIRMED", "venueName": "Demo Restaurant",
+  "date": "2026-10-09", "time": "19:00", "durationMinutes": 120, "partySize": 2,
+  "timeZone": "Africa/Johannesburg", "startsAt": "2026-10-09T17:00:00Z",
+  "manageToken": "<43-char base64url>"
+}
+```
+
+`GET /public/booking` and `POST /public/booking/cancel` return `{ reference, status, tenantSlug, venueSlug, venueName, venuePhone, venueEmail, date, time, durationMinutes, partySize, timeZone, startsAt, guestFirstName, specialRequests, canCancel, cancelUntil, cancelledAt }`. A missing, malformed or unknown token is 404 `BOOKING_NOT_FOUND`. Cancellation is allowed for `PENDING`/`HELD`/`CONFIRMED` bookings until `startsAt − publicCancellationCutoffMinutes`; otherwise 422 `CANCELLATION_NOT_ALLOWED`. Cancelling an already cancelled booking returns it unchanged.
+
+The manage token is never put in an API URL. The SPA's manage link is `/booking/manage#<token>` — the fragment is not sent to servers or in `Referer`. See `SECURITY.md` §Public booking.
+
+Public holds (`POST .../holds`) are not exposed — see D-068.
 
 ## 5. SignalR
 
