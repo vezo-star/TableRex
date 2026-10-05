@@ -120,21 +120,27 @@ Password reset / email verification: Phase 9 (needs notifications).
 
 Permission failures: 401 `UNAUTHORIZED` (no/invalid token), 403 `TENANT_SELECTION_REQUIRED` (tenant endpoint without `tid`), 403 `FORBIDDEN` (missing permission, or a `tid` the user is not an active member of).
 
-### Venues (Phase 3)
+### Venues (Phase 3 — implemented)
+
+Venue scoping (D-018): OWNER/ADMIN see every venue of the tenant; other roles only venues assigned via `PUT /api/v1/staff/{id}/venues`. A venue outside the caller's scope (or another tenant's) is **404 `VENUE_NOT_FOUND`**, never 403. Resources and floor plans inherit this (404 `RESOURCE_NOT_FOUND` / `FLOOR_PLAN_NOT_FOUND`). Times of day are `"HH:mm"` strings; dates are `"yyyy-MM-dd"`; day of week is ISO (1 = Monday … 7 = Sunday).
 
 | Method | Path | Permission |
 |---|---|---|
 | GET | `/api/v1/venues` | venue.view (only accessible venues) |
-| POST | `/api/v1/venues` | venue.manage |
-| GET / PUT | `/api/v1/venues/{venueId}` | venue.view / venue.manage |
-| GET / POST | `/api/v1/venues/{venueId}/sections` | venue.view / venue.manage |
-| PUT / DELETE | `/api/v1/venues/{venueId}/sections/{sectionId}` | venue.manage (delete = deactivate if referenced) |
-| GET / PUT | `/api/v1/venues/{venueId}/operating-hours` | venue.view / venue.manage (replace weekly schedule) |
-| GET / POST | `/api/v1/venues/{venueId}/special-hours` | venue.view / venue.manage |
+| POST | `/api/v1/venues` | venue.manage — `{ name, slug, timeZone, description?, address…, countryCode?, phone?, email?, rules? }`; rules default when omitted; 409 `SLUG_TAKEN` |
+| GET / PUT | `/api/v1/venues/{venueId}` | venue.view / venue.manage (PUT also sets `status` ACTIVE/INACTIVE and `rules`; slug is immutable) |
+| GET / POST | `/api/v1/venues/{venueId}/sections` | venue.view / venue.manage (409 `CONFLICT` on duplicate name) |
+| PUT / DELETE | `/api/v1/venues/{venueId}/sections/{sectionId}` | venue.manage — DELETE returns `{ deleted, deactivated }`: referenced sections are deactivated |
+| GET / PUT | `/api/v1/venues/{venueId}/operating-hours` | venue.view / venue.manage — PUT `{ periods: [{ dayOfWeek, openTime, closeTime }] }` replaces the week; close ≤ open = overnight; overlaps (incl. overnight into the next day and Sunday→Monday) → 400 |
+| GET / POST | `/api/v1/venues/{venueId}/special-hours?from&to` | venue.view / venue.manage — `{ date, name?, isClosed, openTime?, closeTime? }`; one row per period; mixing closed and open rows on one date → 409 `CONFLICT`; overlapping periods → 400 |
 | PUT / DELETE | `/api/v1/venues/{venueId}/special-hours/{id}` | venue.manage |
-| GET | `/api/v1/venues/{venueId}/schedule?from&to` | venue.view — effective periods per business date |
+| GET | `/api/v1/venues/{venueId}/schedule?from&to` | venue.view — effective periods per business date (max 62 days) with UTC `startsAt`/`endsAt` and `overnight` |
 
-### Resources & floor plans (Phase 3)
+`rules` = `{ slotIntervalMinutes (5/10/15/20/30/60), defaultDurationMinutes, minDurationMinutes, maxDurationMinutes, turnoverBufferMinutes, minPartySize, maxPartySize, minLeadTimeMinutes, maxAdvanceDays, holdTtlSeconds, autoConfirmPublicBookings }`.
+
+`PUT /api/v1/staff/{tenantUserId}/venues` (staff.manage) — `{ venueIds: [] }` replaces the member's venue assignments; venues must belong to the tenant (400 otherwise); audited as `venues.changed`. `/api/v1/auth/me` returns `accessibleVenueIds` and `hasAllVenueAccess`.
+
+### Resources & floor plans (Phase 3 — implemented)
 
 | Method | Path | Permission |
 |---|---|---|
@@ -149,7 +155,9 @@ Permission failures: 401 `UNAUTHORIZED` (no/invalid token), 403 `TENANT_SELECTIO
 | GET | `/api/v1/floor-plans?venueId` | floorplan.view |
 | POST | `/api/v1/floor-plans` | floorplan.manage |
 | GET / PUT / DELETE | `/api/v1/floor-plans/{id}` | floorplan.view / floorplan.manage |
-| PUT | `/api/v1/floor-plans/{id}/resources` | floorplan.manage (bulk positions) |
+| PUT | `/api/v1/floor-plans/{id}/resources` | floorplan.manage — `{ positions: [{ resourceId, x, y, width, height, rotation, shape: RECT\|ROUND }] }` replaces all positions; each resource once, must belong to the plan's venue and fit inside the plan (400) |
+
+Resource rules: `code` unique per venue (409 `CODE_TAKEN`; type codes unique per tenant, `^[A-Z][A-Z0-9_]{0,39}$`); `1 ≤ minCapacity ≤ capacity ≤ 1000`; `sectionId` must belong to the same venue; `attributes` is a string map (≤ 20 keys). DELETE returns `{ deleted, deactivated }`.
 
 ### Availability, holds, blocks (Phase 4–5)
 

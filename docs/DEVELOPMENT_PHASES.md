@@ -12,7 +12,7 @@ The next phase starts only after the explicit instruction **"PROCEED TO NEXT PHA
 | 0 | Discovery & Architecture | **Approved** (2026-10-05) — D-002 .NET 10, D-014 AwesomeAssertions, D-018 venue-scoped access |
 | 1 | Foundation | **Complete** (2026-10-05) |
 | 2 | Authentication & Multi-tenancy | **Complete** (2026-10-05) |
-| 3 | Venues & Resources | Not started |
+| 3 | Venues & Resources | **Complete** (2026-10-05) |
 | 4 | Availability Engine | Not started |
 | 5 | Core Booking Engine | Not started |
 | 6 | Internal Staff Experience | Not started |
@@ -73,6 +73,13 @@ Completion notes (2026-10-05):
 Build: migrations V006–V013; venue assignments for staff (`tenant_user_venues`, D-018) wired into `IVenueAccessGuard`; venues (incl. booking rules, time zone validation against IANA via NodaTime), sections, resource types, resources, floor plans + positions, weekly and special operating hours; `OperatingSchedule` domain logic (overnight, DST); schedule endpoint; audit for all mutations; frontend venue switcher, ResourcesPage, FloorPlanPage (SVG editor: drag, resize, rotate), SettingsPage (hours, special hours); dev seed of Demo Restaurant and Demo Club with sections and resources.
 
 Acceptance: admin can create venue, sections, resources; resources appear on the floor plan; operating hours and overnight hours correct (unit tests incl. DST); tenant isolation tests extended to venues/resources; tests pass.
+
+Completion notes (2026-10-05):
+- Verified: Release build with 0 warnings; 88 unit tests (26 new: `OperatingSchedule` overnight, special closed/custom days, Europe/London spring-forward gap and fall-back overlap, `FindContaining` after midnight, weekly overlap incl. Sunday→Monday wrap; venue/resource/floor-plan validators), 55 integration tests (9 new: venue CRUD + defaults + audit, `SLUG_TAKEN`, cross-tenant 404 for venues/resources/floor plans and cross-tenant resource creation, venue scoping for an assigned Host incl. `/me.accessibleVenueIds`, Host 403 on manage endpoints, capacity/section/type rules and `CODE_TAKEN`, delete-vs-deactivate, floor-plan bounds and foreign-venue rejection, overnight schedule in UTC, special-day conflicts); 111 Vitest tests; ESLint + Prettier clean.
+- Migrations V006–V013 applied to the Compose database; the migration test re-applies all scripts from empty. `seed-dev` adds Demo Restaurant (16 resources, lunch + dinner Tue–Sun), Demo Club (7 resources, Wed–Sat 20:00–04:00), Demo Workspace in Demo Coworking (9 rooms/desks, Mon–Fri), each with a floor plan; demo staff are assigned to Demo Restaurant (manager also to Demo Club). Re-running is a no-op.
+- Browser smoke test (throwaway admin account): venue list, venue settings with weekly hours (overnight "+1 day") and the 14-day schedule preview, resources per venue with the header venue switcher (selection remembered per tenant), server validation shown on the capacity field, floor plan drag → save → reload keeps the new position, staff venue assignments.
+- Fixed during verification: `ON DELETE RESTRICT` raises SQLSTATE 23001, not 23503, so delete-or-deactivate now treats both as "still referenced"; nested validation keys were only partly camel-cased (`rules.MaxPartySize`) — every path segment is now camel-cased.
+- Not built (moved): resource combinations are Phase 4 (they belong with availability). The planned "SettingsPage (hours)" lives under Venues → venue settings because hours are per venue.
 
 ## Phase 4 — Availability Engine
 
@@ -138,7 +145,8 @@ Full review against the checklist in the master specification §67 Phase 12 and 
 | Row-Level Security | Phase 12 evaluation | Defense in depth on top of tested tenant scoping |
 | ~~`http.js` auth header and single-flight refresh interceptors~~ | Done in Phase 2 | |
 | ~~`Migrations seed-dev` command~~ | Done in Phase 2 | |
-| `IVenueAccessGuard` and `/me.accessibleVenueIds` | Phase 3 | Needs venues and `tenant_user_venues` |
+| ~~`IVenueAccessGuard` and `/me.accessibleVenueIds`~~ | Done in Phase 3 | |
+| Resource combinations CRUD | Phase 4 | Belongs with availability |
 | Password reset / email verification | Phase 9 | Needs notifications |
 | SignalR JS client (`realtimeService`) | Phase 7 | Realtime phase |
 | CI `package` stage (build and push images) | Phase 12 | Needs a registry and hosting decision; images are build-verified locally |

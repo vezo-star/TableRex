@@ -17,8 +17,8 @@ Status: **Phases 1–2 implemented (V001–V005, V023, V027); later tables are t
 - **Immutable once merged** to main. Corrections are new migrations.
 - Execution: `dotnet run --project Backend/BookingPlatform.Migrations --launch-profile migrate -- migrate` locally, or the `migrator` image (`docker run --rm -e ConnectionStrings__Postgres=... bookingplatform/migrator`). Exit codes: 0 success (including "nothing to apply"), 1 failure or missing connection string, 2 unknown command. The Api may auto-migrate only in Development when `Database__AutoMigrate=true`. Production runs the migrator as an explicit deployment step/job.
 - Script names are validated (`V###__lower_snake.sql`, unique version numbers) by a unit test, so a misnamed file fails CI rather than being silently skipped.
-- Implemented: **V001__extensions** (Phase 1); **V002–V005, V023, V027** (Phase 2).
-- Dev data: `--launch-profile seed-dev` (C# seeder, idempotent; runs migrations first; creates Demo Hospitality and Demo Coworking, the dev admin as platform admin + owner of both, and manager/host/staff/viewer users in Demo Hospitality; all passwords come from `DEV_ADMIN_PASSWORD`; refuses when `DOTNET_ENVIRONMENT=Production`).
+- Implemented: **V001__extensions** (Phase 1); **V002–V005, V023, V027** (Phase 2); **V006–V013** (Phase 3).
+- Dev data: `--launch-profile seed-dev` (C# seeder, idempotent; runs migrations first; creates Demo Hospitality and Demo Coworking, the dev admin as platform admin + owner of both, and manager/host/staff/viewer users in Demo Hospitality; all passwords come from `DEV_ADMIN_PASSWORD`; refuses when `DOTNET_ENVIRONMENT=Production`). Phase 3 adds Demo Restaurant and Demo Club (Demo Hospitality) and Demo Workspace (Demo Coworking) with sections, resource types, resources, weekly hours and a floor plan each; a venue's contents are only seeded when the venue itself is created, so edits made in the app survive re-runs.
 - Out-of-order numbers: DbUp applies every script missing from the journal, sorted by name, so a database that already has V027 still receives V006–V022 later. Consequently a lower-numbered migration added later must not depend on data or objects from a higher-numbered one that was applied earlier, and vice versa.
 
 ### Phase 2 schema notes
@@ -29,6 +29,15 @@ Status: **Phases 1–2 implemented (V001–V005, V023, V027); later tables are t
 - `tenant_users` is unique on `(tenant_id, user_id)` and exposes `(tenant_id, id)` for composite FKs; `tenant_user_roles` references it via `(tenant_id, tenant_user_id)` so a role assignment can never point at another tenant's membership.
 - `roles.tenant_id` is null for system roles (partial unique indexes for system vs tenant role codes); `permissions.code` is the PK with format `area.action`.
 - `audit_logs` is append-only: a trigger raises on `UPDATE`/`DELETE`. Retention purges (Phase 12) must run as a privileged maintenance job that disables the trigger explicitly.
+
+### Phase 3 schema notes
+
+- `venues`: unique `(tenant_id, slug)`; booking rules are columns with CHECKs mirroring the validators (slot interval in 5/10/15/20/30/60, min ≤ default ≤ max duration ≤ 1440, party size 1–1000, hold TTL 60–3600 s). `time_zone` is an IANA id validated by the application.
+- `tenant_user_venues(tenant_id, tenant_user_id, venue_id)` — venue assignments for D-018; both FKs are composite with `tenant_id` and `ON DELETE CASCADE`.
+- Every child table exposes `(tenant_id, venue_id, id)` and references its parent with the full composite key, so a resource can only sit in a section of the **same venue**, and a floor-plan position can only reference a resource of the plan's venue — enforced by the database, not just the service.
+- `bookable_resources`: unique `(venue_id, code)`; `0 < min_capacity ≤ capacity ≤ 1000`; `attributes jsonb` must be an object. Section/type/venue FKs are `ON DELETE RESTRICT` (delete-or-deactivate, D-038).
+- `floor_plan_resources`: PK `(floor_plan_id, resource_id)`; numeric(8,2) geometry, rotation `[0, 360)`, shape RECT/ROUND; cascades when the plan or resource is deleted.
+- `operating_hours`: ISO `day_of_week` 1–7, `open_time <> close_time` (close ≤ open = overnight). `special_operating_hours`: one row per period; `is_closed` ⇔ both times null.
 
 ### Planned sequence and phase
 

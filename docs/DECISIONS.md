@@ -95,6 +95,16 @@ Changing an Accepted decision requires the stop-and-explain process in `AGENTS.m
 
 **D-037 — Application-level rate limiter on Redis.** Accepted. ASP.NET Core's built-in rate limiter is per-process; limits must hold across instances, so `IRateLimiter` uses a Redis fixed window (Lua `INCR` + `PEXPIRE`) and falls back to an in-memory window when Redis is unavailable (availability over strictness for auth endpoints). No new package.
 
+## Phase 3 implementation decisions (2026-10-05)
+
+**D-038 — Delete-or-deactivate via savepoint.** Accepted. Sections and resources referenced by other rows (resources, later bookings) must keep their history. Deletes run inside a savepoint (`DbSession.TryDeleteAsync`); a foreign-key violation (SQLSTATE 23503, or 23001 for `ON DELETE RESTRICT`) rolls back to the savepoint and the row is deactivated instead, in the same transaction. The API returns `{ deleted, deactivated }` so the UI can tell the user what happened. No pre-check query, so there is no check-then-act race.
+
+**D-039 — Times of day as `HH:mm`.** Accepted. `TimeOnly` is serialised as `"HH:mm"` (seconds only when non-zero) and accepted as `HH:mm` or `HH:mm:ss`, matching `<input type="time">`. Operating hours must be whole minutes.
+
+**D-040 — Special hours are per-period rows that replace the weekly schedule for that date.** Accepted. A date either has one closed row or one or more custom periods; mixing is rejected (409) and custom periods may not overlap (400). The venue row is locked while validating so concurrent edits cannot create a mix. A business date is the local date a period opens on (D-012); `OperatingSchedule` resolves DST gaps forward and overlaps to the earlier offset (NodaTime lenient resolver).
+
+**D-041 — Selected venue is client state.** Accepted. The header venue switcher stores the selection per tenant in `localStorage` (`bp-venue:{tenantId}`); the server never trusts it — every venue-scoped request passes the venue id and is checked by `IVenueAccessGuard`.
+
 ## Risk register
 
 | # | Risk | Impact | Mitigation |
