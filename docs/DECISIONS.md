@@ -145,6 +145,18 @@ Changing an Accepted decision requires the stop-and-explain process in `AGENTS.m
 
 **D-060 — Audit log uses keyset pagination.** Accepted. Newest first by `(created_at, id)`; `nextCursor` is an opaque base64url `ticks_id` token passed back as `before`. Offsets are avoided because the table only grows and is read newest-first.
 
+## Phase 7 implementation decisions (2026-10-05)
+
+**D-061 — One dispatcher core for both outbox destinations.** Accepted. `OutboxStore` (claim / processed / failed) and the abstract `OutboxDispatcher` live in Infrastructure; the Api hosts the REALTIME dispatcher (it owns the hub), the Worker will host the NOTIFICATION dispatcher (Phase 9). Claims use `FOR UPDATE SKIP LOCKED` with a 30 s lease, so several instances never send the same row concurrently and a crashed instance's rows are reclaimed. Retries back off `2^n` s ± 20 % (max 15 min), 5 attempts, then `DEAD`. This required `Microsoft.Extensions.Hosting.Abstractions` in Infrastructure (Microsoft, same version train as the framework) for `BackgroundService`.
+
+**D-062 — Stale realtime events are skipped, not replayed.** Accepted. A REALTIME row older than 300 s when claimed is marked PROCESSED with `last_error = 'Skipped: …'`. Clients always resync from REST after a reconnect, so delivering minutes-old "something changed" hints adds load without information. NOTIFICATION rows are never skipped.
+
+**D-063 — Realtime is a hint; polling is the fallback only.** Accepted. Pages refresh on matching events (debounced 300 ms) and on resync; the 60 s polling from D-056 now runs only while the realtime status is not connected. The REST API remains the only source of state.
+
+**D-064 — The drawer never overwrites an in-progress edit.** Accepted. A newer event for the open booking reloads the drawer in view mode; while the user is editing or a request is in flight it shows a "changed by someone else" banner with Reload / Keep editing. Saving with the stale version still fails with 409 from optimistic concurrency.
+
+**D-065 — WebSockets only, no negotiation.** Accepted. Client uses `skipNegotiation` + WebSockets; the server only enables WebSockets. No sticky sessions are needed behind a load balancer, and the token travels once in the WebSocket upgrade URL (`access_token`, accepted only on `/hubs/*`, never logged). Long polling/SSE can be enabled later together with sticky sessions if a client environment requires it.
+
 ## Risk register
 
 | # | Risk | Impact | Mitigation |

@@ -15,8 +15,8 @@ The next phase starts only after the explicit instruction **"PROCEED TO NEXT PHA
 | 3 | Venues & Resources | **Complete** (2026-10-05) |
 | 4 | Availability Engine | **Complete** (2026-10-05) |
 | 5 | Core Booking Engine | **Complete** (2026-10-05) |
-| 6 | Internal Staff Experience | Not started |
-| 7 | Real-time | Not started |
+| 6 | Internal Staff Experience | **Complete** (2026-10-05) |
+| 7 | Real-time | **Complete** (2026-10-05) |
 | 8 | Public Booking | Not started |
 | 9 | Outbox & Notifications | Not started |
 | 10 | Payments (abstractions) | Not started |
@@ -125,6 +125,13 @@ Build: `VenueHub`, join authorization, realtime outbox dispatcher in Api, Redis 
 
 Acceptance: two browser sessions on the same venue stay synchronised; tenant isolation intact (tests); reconnect triggers resync (tests).
 
+Completion notes (2026-10-05):
+- Backend: `VenueHub` (WebSockets only, join re-checks membership + `booking.view` + venue access, uniform `FORBIDDEN`), `HubErrorFilter`, Redis backplane (`bp-{env}` channel prefix), shared `OutboxStore`/`OutboxDispatcher` (SKIP LOCKED claims, lease, backoff, dead-letter, `LISTEN outbox` + poll fallback) and the Api's `RealtimeOutboxDispatcher`; resource and floor-plan services now emit `ResourceUpdated`/`FloorPlanUpdated`. Release build 0 warnings; 235 backend tests green (new: 4 `RealtimeTests`, 2 `OutboxDispatcherTests` covering success/retry/dead-letter/permanent failure/lease reclaim/stale skip, retry-policy unit tests).
+- Frontend: `@microsoft/signalr` client, `realtime` store (reconnect, manual retry, re-join, resync, dedup, hidden-tab resync), `useRealtimeRefresh`, header indicator; board, drawer and dashboard refresh on events and poll only while disconnected. 166 Vitest tests green, ESLint/Prettier clean, `quasar build` succeeds; `npm audit` 0 vulnerabilities.
+- Browser check with two sessions on Demo Restaurant: API-created booking appeared on the board ~1.5 s later; a cancel in one tab updated the other; Api stopped → "Reconnecting…"; Api restarted → both tabs re-joined, resynced and received the next booking live. Dev database: stale pre-Phase-7 REALTIME rows skipped as designed, live rows dispatched within 0.5 s, NOTIFICATION rows left for Phase 9. No `access_token` in request logs.
+- Fixed during verification: SignalR logged every refused join as an error (now a filter + log override); Pinia proxied the connection object and broke retry identity checks (`markRaw`).
+- Decisions: D-061 – D-065.
+
 ## Phase 8 — Public Booking
 
 Build: public controllers/DTOs, public availability (times only), public holds (optional), public booking via `BookingService`, public confirmation by token, customer cancellation per policy, Redis-backed rate limiting, abuse controls, PublicBookingPage + BookingConfirmationPage (mobile-first), embeddable widget approach decision.
@@ -169,5 +176,5 @@ Full review against the checklist in the master specification §67 Phase 12 and 
 | ~~`IVenueAccessGuard` and `/me.accessibleVenueIds`~~ | Done in Phase 3 | |
 | ~~Resource combinations CRUD~~ | Done in Phase 4 | |
 | Password reset / email verification | Phase 9 | Needs notifications |
-| SignalR JS client (`realtimeService`) | Phase 7 | Realtime phase |
+| ~~SignalR JS client (`realtimeService`)~~ | Done in Phase 7 | |
 | CI `package` stage (build and push images) | Phase 12 | Needs a registry and hosting decision; images are build-verified locally |

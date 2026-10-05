@@ -103,6 +103,12 @@ The Npgsql pool size in tests is raised (`MaxPoolSize=150`, container `max_conne
 
 Connection with valid token; join own venue; receive BookingCreated/Updated/Cancelled/Moved after commit; no event for rolled-back operations; cross-tenant join rejected; reconnect + rejoin + resync (store-level unit test and Playwright two-session test).
 
+Implemented in Phase 7:
+- `Realtime/RealtimeTests.cs` (SignalR client over the TestServer WebSocket): `BookingCreated` after commit with an ids-only payload (no customer data); the losing request of a conflict emits nothing; Updated/Moved/Cancelled delivered and nothing after `LeaveVenue`; NOTIFICATION rows untouched by the Api dispatcher; cross-tenant `JoinVenue` → `FORBIDDEN` and no events; a Host can join only an assigned venue and receives `ResourceUpdated`; an invalid token is refused.
+- `Outbox/OutboxDispatcherTests.cs`: success, retry with backoff, dead-letter after max attempts, permanent failure dead-letters at once, expired lease reclaimed, stale rows skipped. `OutboxRetryPolicyTests` (unit): exponential growth, jitter bounds, cap.
+- Vitest: `stores/realtime.spec.js` (no connection without a session, connect + join + resync, token refresh near expiry, dedup + other-venue filter, rejoin + resync after reconnect, retry backoff until stopped, venue switch + denied join, hidden-tab resync), `services/realtimeService.spec.js`, `composables/useRealtimeRefresh.spec.js`, plus board/drawer/layout updates (refetch rules, remote-change banner, indicator).
+- Two-session browser check done manually (Phase 7); automated as Playwright in Phase 12.
+
 ## 7. Frontend tests
 
 - Vitest: `http.js` refresh single-flight and replay, ProblemDetails normalisation, `auth`/`tenant`/`venue` stores, `realtime` store reconnect → resync, `usePermissions`, venue time formatting, booking form validation and idempotency key reuse on retry.

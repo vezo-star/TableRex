@@ -298,4 +298,8 @@ Abuse controls: rate limits per IP and per venue, payload size limits, optional 
 
 ## 5. SignalR
 
-See `REALTIME.md`. Hub at `/hubs/venue`; methods `JoinVenue(venueId)`, `LeaveVenue(venueId)`.
+Implemented in Phase 7 — see `REALTIME.md`.
+
+- Hub: `/hubs/venue`, WebSockets only (`skipNegotiation: true` on the client). Authenticate with the access token as the `access_token` query string (only accepted on `/hubs/*`).
+- Client → server: `JoinVenue(venueId)`, `LeaveVenue(venueId)`. Refusals throw `HubException` with message `FORBIDDEN` (no membership, no `booking.view`, no access to the venue, or the venue doesn't exist in the tenant); unexpected failures surface as `UNAVAILABLE`.
+- Server → client: one method per event type (`BookingCreated`, `BookingUpdated`, `BookingCancelled`, `BookingMoved`, `BookingStatusChanged`, `ResourceUpdated`, `ResourceBlocked`, `HoldCreated`, `HoldExpired`, `FloorPlanUpdated`) with the ids-only payload `{ eventId, type, venueId, entityId, version, businessDate, occurredAt }` (`version`/`businessDate` may be null). Delivery is at-least-once; deduplicate by `eventId` and refetch through REST.

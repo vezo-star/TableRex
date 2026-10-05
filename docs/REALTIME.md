@@ -1,6 +1,6 @@
 # Real-time
 
-Status: **Phase 0 — design; implemented in Phase 7.**
+Status: **Implemented (Phase 7).** See §8 for implementation notes.
 
 ## 1. Principles
 
@@ -86,3 +86,25 @@ Booking transaction ── writes ──► outbox_messages (destination = REALT
 - Rolled-back booking emits no event.
 - Booking created/updated/cancelled/moved events delivered.
 - Reconnect: client rejoins and resync endpoint returns the authoritative state (frontend unit test for the store logic; E2E for two browser sessions).
+
+## 8. Implementation notes (Phase 7)
+
+Backend (`BookingPlatform.Api/Realtime`, `BookingPlatform.Infrastructure/Outbox`):
+
+- `VenueHub` — WebSockets transport only, `CloseOnAuthenticationExpiration`, maximum incoming message 4 KB. `JoinVenue` re-checks on every call: membership active, `booking.view`, then `IVenueAccessGuard`. Every refusal is the same `HubException("FORBIDDEN")`.
+- `HubErrorFilter` — hub exceptions pass through; anything else is logged once and replaced by `HubException("UNAVAILABLE")` so internals never reach the client. SignalR's own dispatcher logger is raised to `Fatal` so expected refusals don't log as errors.
+- Redis backplane — `AddStackExchangeRedis` with channel prefix `bp-{environment}` (`Realtime:ChannelPrefix` overrides), `AbortOnConnectFail=false`. A Redis outage stops cross-instance fan-out only.
+- `OutboxStore` + abstract `OutboxDispatcher` (shared with the Phase 9 Worker) — rows are claimed with `FOR UPDATE SKIP LOCKED` (PENDING/FAILED that are due, or PROCESSING whose 30 s lease expired), `attempt_count` incremented on claim. Wake-up via `LISTEN outbox` with a 2 s poll fallback; the listener reconnects with backoff up to 30 s. Retry backoff `2^n` s ± 20 %, capped at 15 min; after 5 attempts the row is `DEAD`. `OutboxPermanentException` / `JsonException` dead-letter immediately.
+- `RealtimeOutboxDispatcher` processes `destination = 'REALTIME'` only (NOTIFICATION rows are left for the Worker). Rows older than `Realtime:MaxAgeSeconds` (300) when claimed are marked PROCESSED with `last_error = 'Skipped: …'` — after downtime, clients resync from REST anyway, so replaying stale events would only cause refetch storms. Unknown event types or rows without a tenant are dead-lettered.
+- Event producers: `BookingService` (created/updated/moved/cancelled/status changed), `HoldService` (created/expired), `BlockService` (`ResourceBlocked`), `ResourceService` (`ResourceUpdated` on create/update/delete) and `FloorPlanService` (`FloorPlanUpdated` on create/update/delete/positions).
+- Settings (`Realtime` section): `DispatcherEnabled` (true), `ChannelPrefix`, `BatchSize` (100), `PollSeconds` (2), `MaxAgeSeconds` (300).
+
+Frontend:
+
+- `services/realtimeService.js` — connection factory (`skipNegotiation`, WebSockets, automatic reconnect `[0, 2s, 5s, 10s, 30s]`).
+- `stores/realtime.js` — status (`disconnected` / `connecting` / `connected` / `reconnecting`), current/joined venue, manual retry `[2s, 5s, 10s, 30s, 60s]` after the automatic schedule gives up, re-join + resync broadcast on every (re)connect, `eventId` dedup (last 500), events for other venues ignored, resync when a tab returns after ≥ 60 s hidden. The connection object is kept out of Pinia's reactivity (`markRaw`).
+- `composables/useRealtimeRefresh.js` — pages subscribe with a filter; matching events (and resyncs) are batched with a 300 ms debounce into one refresh. Returns `live` so pages fall back to 60 s polling only while disconnected.
+- `components/common/RealtimeIndicator.vue` in the dashboard header — "Live", "Reconnecting…" or "Live updates paused" (click to retry now).
+- Board: resource/floor-plan events reload resources; booking/hold/block events reload the board when they concern the shown date or a booking already on it. Drawer: in view mode it reloads silently; while editing it shows a "changed by someone else" banner instead of overwriting the form. Dashboard: refreshes on today's booking events.
+
+Verified manually (2026-10-05): two browser sessions on Demo Restaurant — a booking created through the API appears on the board within ~1.5 s; a cancel in one tab updates the other; stopping the Api shows "Reconnecting…", and after restart both tabs re-join, resync and receive new events live. Tokens never appear in request logs.
