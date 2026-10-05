@@ -57,11 +57,24 @@ describe('normaliseError', () => {
   })
 
   it('treats unknown 5xx responses as INTERNAL_ERROR', () => {
-    const error = normaliseError(responseError(502, null))
+    const error = normaliseError(responseError(500, null))
 
-    expect(error.status).toBe(502)
+    expect(error.status).toBe(500)
     expect(error.code).toBe(ErrorCodes.INTERNAL_ERROR)
   })
+
+  it.each([502, 503, 504])(
+    'reports a bodiless %i from a proxy as temporarily unavailable',
+    (status) => {
+      const error = normaliseError(responseError(status, '<html>Bad Gateway</html>'))
+
+      expect(error).toMatchObject({
+        status,
+        code: ErrorCodes.SERVICE_UNAVAILABLE,
+        message: 'The service is temporarily unavailable. Please try again in a moment.',
+      })
+    },
+  )
 
   it('reports a network failure with status 0', () => {
     const error = normaliseError({ code: 'ERR_NETWORK', message: 'Network Error' })

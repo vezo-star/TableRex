@@ -8,6 +8,10 @@ const STATUS_CODES = Object.freeze({
   405: ErrorCodes.METHOD_NOT_ALLOWED,
   409: ErrorCodes.CONFLICT,
   429: ErrorCodes.RATE_LIMITED,
+  // Proxy and gateway errors (for example during a deploy) carry no ProblemDetails body.
+  502: ErrorCodes.SERVICE_UNAVAILABLE,
+  503: ErrorCodes.SERVICE_UNAVAILABLE,
+  504: ErrorCodes.SERVICE_UNAVAILABLE,
 })
 
 const DEFAULT_MESSAGES = Object.freeze({
@@ -19,6 +23,8 @@ const DEFAULT_MESSAGES = Object.freeze({
   [ErrorCodes.NOT_FOUND]: 'The requested item could not be found.',
   [ErrorCodes.RATE_LIMITED]: 'Too many requests. Please wait a moment and try again.',
   [ErrorCodes.INTERNAL_ERROR]: 'An unexpected error occurred. Please try again.',
+  [ErrorCodes.SERVICE_UNAVAILABLE]:
+    'The service is temporarily unavailable. Please try again in a moment.',
 })
 
 const GENERIC_MESSAGE = 'The request could not be completed.'
