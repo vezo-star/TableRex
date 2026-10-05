@@ -20,6 +20,8 @@ using BookingPlatform.Infrastructure.Identity;
 using BookingPlatform.Application.Notifications;
 using BookingPlatform.Infrastructure.Notifications;
 using BookingPlatform.Infrastructure.Outbox;
+using BookingPlatform.Application.Payments;
+using BookingPlatform.Infrastructure.Payments;
 using BookingPlatform.Infrastructure.Persistence;
 using BookingPlatform.Application.PublicBooking;
 using BookingPlatform.Infrastructure.PublicBooking;
@@ -32,6 +34,7 @@ using BookingPlatform.Infrastructure.Venues;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Npgsql;
 using StackExchange.Redis;
@@ -115,7 +118,39 @@ public static class DependencyInjection
         services.AddScoped<IPublicDirectory, PublicDirectory>();
         services.AddScoped<IPasswordResetRepository, PasswordResetRepository>();
         services.AddScoped<INotificationRepository, NotificationRepository>();
+        services.AddScoped<IPaymentRepository, PaymentRepository>();
 
+        return services;
+    }
+
+    /// <summary>
+    /// Payment providers for the Api. Only providers registered here can be selected with <c>Payments:Provider</c>; the
+    /// Simulated provider is never registered in Production, so configuring it there fails at startup (D-084).
+    /// </summary>
+    public static IServiceCollection AddPayments(this IServiceCollection services, IConfiguration configuration, IHostEnvironment environment)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+        ArgumentNullException.ThrowIfNull(environment);
+
+        services.AddOptions<PaymentOptions>()
+            .Bind(configuration.GetSection(PaymentOptions.SectionName))
+            .Validate(PaymentOptions.IsValid, "Payments:Provider must be a provider name and Payments:PublicBaseUrl an absolute http(s) origin without a trailing slash.")
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<PaymentOptions>>(sp => new PaymentProviderAvailableValidator(sp, environment.EnvironmentName));
+
+        if (!environment.IsProduction())
+        {
+            services.AddOptions<SimulatedPaymentOptions>()
+                .Bind(configuration.GetSection(SimulatedPaymentOptions.SectionName))
+                .Validate(o => o.TimestampToleranceSeconds is >= 30 and <= 3600
+                    && (string.IsNullOrEmpty(o.WebhookSecret) || System.Text.Encoding.UTF8.GetByteCount(o.WebhookSecret) >= 32),
+                    "Payments:Simulated:WebhookSecret must be empty or at least 32 bytes, and the timestamp tolerance 30-3600 seconds.")
+                .ValidateOnStart();
+            services.AddSingleton<SimulatedPaymentProvider>();
+            services.AddSingleton<IPaymentProvider>(sp => sp.GetRequiredService<SimulatedPaymentProvider>());
+        }
+
+        services.AddSingleton<IPaymentProviderRegistry, PaymentProviderRegistry>();
         return services;
     }
 

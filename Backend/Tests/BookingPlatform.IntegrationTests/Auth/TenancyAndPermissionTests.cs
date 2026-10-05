@@ -198,7 +198,7 @@ public sealed class TenancyAndPermissionTests(InfrastructureFixture fixture) : A
 
         roles.EnumerateArray().Select(r => r.GetProperty("code").GetString())
             .Should().Equal("TENANT_OWNER", "TENANT_ADMIN", "MANAGER", "HOST", "STAFF", "VIEW_ONLY");
-        roles[0].GetProperty("permissions").GetArrayLength().Should().Be(21);
+        roles[0].GetProperty("permissions").GetArrayLength().Should().Be(23);
         roles[5].GetProperty("permissions").EnumerateArray().Select(p => p.GetString())
             .Should().BeEquivalentTo("booking.view", "resource.view", "venue.view", "floorplan.view");
     }

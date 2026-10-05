@@ -15,7 +15,8 @@ namespace BookingPlatform.IntegrationTests.Infrastructure;
 public sealed class ApiFactory(
     string postgresConnectionString,
     string redisConnectionString,
-    IReadOnlyDictionary<string, string?>? settings = null) : WebApplicationFactory<Program>
+    IReadOnlyDictionary<string, string?>? settings = null,
+    Action<IServiceCollection>? configureServices = null) : WebApplicationFactory<Program>
 {
     // Ports that refuse connections immediately, for tests that need dependencies to be down.
     public const string UnreachablePostgres = "Host=127.0.0.1;Port=1;Database=unreachable;Username=unreachable;Password=unreachable;Timeout=2";
@@ -45,7 +46,10 @@ public sealed class ApiFactory(
         builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(configuration));
 
         builder.ConfigureTestServices(services =>
-            services.AddControllers().AddApplicationPart(typeof(ApiFactory).Assembly));
+        {
+            services.AddControllers().AddApplicationPart(typeof(ApiFactory).Assembly);
+            configureServices?.Invoke(services);
+        });
     }
 
     /// <summary>HTTPS base address so Secure cookies behave like production; cookies are managed explicitly by tests.</summary>

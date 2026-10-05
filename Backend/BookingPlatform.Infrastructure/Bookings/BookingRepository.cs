@@ -26,9 +26,9 @@ public sealed class BookingRepository(DbSession db) : IBookingRepository
         db.ExecuteAsync(
             """
             INSERT INTO bookings (id, tenant_id, venue_id, customer_id, reference, status, source, party_size, starts_at, ends_at, business_date,
-                                  special_requests, internal_notes, created_by_user_id, public_token_hash, confirmed_at, seated_at, created_at, updated_at)
+                                  special_requests, internal_notes, created_by_user_id, public_token_hash, expires_at, confirmed_at, seated_at, created_at, updated_at)
             VALUES (@Id, @tenantId, @VenueId, @CustomerId, @Reference, @Status, @Source, @PartySize, @StartsAt, @EndsAt, @BusinessDate,
-                    @SpecialRequests, @InternalNotes, @CreatedByUserId, @PublicTokenHash,
+                    @SpecialRequests, @InternalNotes, @CreatedByUserId, @PublicTokenHash, @ExpiresAt,
                     CASE WHEN @Status = 'CONFIRMED' THEN @Now END, CASE WHEN @Status = 'SEATED' THEN @Now END, @Now, @Now)
             """,
             new
@@ -48,6 +48,7 @@ public sealed class BookingRepository(DbSession db) : IBookingRepository
                 booking.InternalNotes,
                 booking.CreatedByUserId,
                 booking.PublicTokenHash,
+                booking.ExpiresAt,
                 booking.Now,
             },
             cancellationToken);

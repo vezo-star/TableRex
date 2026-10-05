@@ -24,6 +24,8 @@ public static class Permissions
     public const string StaffManage = "staff.manage";
     public const string ReportsView = "reports.view";
     public const string SettingsManage = "settings.manage";
+    public const string PaymentView = "payment.view";
+    public const string PaymentRefund = "payment.refund";
 }
 
 /// <summary>System role codes seeded by V027.</summary>

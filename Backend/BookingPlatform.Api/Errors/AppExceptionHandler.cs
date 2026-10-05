@@ -38,6 +38,7 @@ public sealed class AppExceptionHandler(IProblemDetailsService problemDetailsSer
             BusinessRuleAppException e => Create(StatusCodes.Status422UnprocessableEntity, "Business rule violated", e.Message),
             LockedAppException e => Create(StatusCodes.Status423Locked, "Locked", e.Message),
             RateLimitedAppException e => Create(StatusCodes.Status429TooManyRequests, "Too many requests", e.Message),
+            ServiceUnavailableAppException e => Create(StatusCodes.Status503ServiceUnavailable, "Service unavailable", e.Message),
             BadHttpRequestException badRequest => Create(badRequest.StatusCode, "Bad request", "The request could not be processed."),
             _ => Create(StatusCodes.Status500InternalServerError, "Internal server error", "An unexpected error occurred."),
         };
@@ -63,7 +64,11 @@ public sealed class AppExceptionHandler(IProblemDetailsService problemDetailsSer
             httpContext.Response.Headers.RetryAfter = rateLimited.RetryAfterSeconds.ToString(CultureInfo.InvariantCulture);
         }
 
-        if (problem.Status >= StatusCodes.Status500InternalServerError)
+        if (exception is ServiceUnavailableAppException)
+        {
+            logger.LogWarning("{Method} {Path} is unavailable: {Reason}", httpContext.Request.Method, httpContext.Request.Path, exception.Message);
+        }
+        else if (problem.Status >= StatusCodes.Status500InternalServerError)
         {
             logger.LogError(exception, "Unhandled exception while processing {Method} {Path}", httpContext.Request.Method, httpContext.Request.Path);
         }

@@ -1,4 +1,5 @@
 using BookingPlatform.Api.Security;
+using BookingPlatform.Application.Payments;
 using BookingPlatform.Application.PublicBooking;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -63,5 +64,14 @@ public sealed class PublicBookingController(PublicBookingService publicBooking) 
     {
         Response.Headers.CacheControl = "no-store";
         return await publicBooking.CancelAsync(Request.Headers[TokenHeader].ToString(), cancellationToken);
+    }
+
+    /// <summary>Starts the deposit checkout for a HELD booking and returns the provider URL to send the guest to.</summary>
+    [HttpPost("booking/payment")]
+    [RateLimit("public-payment", 10, 600)]
+    public async Task<PublicCheckoutDto> Pay(CancellationToken cancellationToken)
+    {
+        Response.Headers.CacheControl = "no-store";
+        return await publicBooking.StartPaymentAsync(Request.Headers[TokenHeader].ToString(), cancellationToken);
     }
 }

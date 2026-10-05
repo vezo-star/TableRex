@@ -66,4 +66,7 @@ public static class ErrorCodes
     public const string PlanLimitReached = "PLAN_LIMIT_REACHED";
     public const string PaymentNotFound = "PAYMENT_NOT_FOUND";
     public const string InvalidWebhookSignature = "INVALID_WEBHOOK_SIGNATURE";
+    public const string PaymentUnavailable = "PAYMENT_UNAVAILABLE";
+    public const string PaymentNotPayable = "PAYMENT_NOT_PAYABLE";
+    public const string RefundNotAllowed = "REFUND_NOT_ALLOWED";
 }

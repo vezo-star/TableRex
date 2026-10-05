@@ -1,3 +1,5 @@
+using Microsoft.Extensions.DependencyInjection;
+
 namespace BookingPlatform.IntegrationTests.Infrastructure;
 
 /// <summary>Per-test migrated database (cloned from the template) and a real Api host over it.</summary>
@@ -15,11 +17,16 @@ public abstract class ApiTestBase(InfrastructureFixture fixture) : IAsyncLifetim
 
     protected virtual IReadOnlyDictionary<string, string?>? Settings => null;
 
+    /// <summary>Extra service registrations applied after the Api's own (test doubles).</summary>
+    protected virtual void ConfigureServices(IServiceCollection services)
+    {
+    }
+
     public virtual async ValueTask InitializeAsync()
     {
         var connectionString = await Fixture.CreateMigratedDatabaseAsync();
         Data = new TestData(connectionString);
-        Factory = new ApiFactory(connectionString, Fixture.RedisConnectionString, Settings);
+        Factory = new ApiFactory(connectionString, Fixture.RedisConnectionString, Settings, ConfigureServices);
     }
 
     public virtual async ValueTask DisposeAsync()

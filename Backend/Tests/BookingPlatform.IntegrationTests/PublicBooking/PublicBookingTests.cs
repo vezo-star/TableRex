@@ -21,16 +21,16 @@ public sealed class PublicBookingTests(InfrastructureFixture fixture) : ApiTestB
     [
         "tenantSlug", "tenantName", "slug", "name", "description", "addressLine1", "addressLine2", "city", "region", "postalCode",
         "countryCode", "phone", "email", "timeZone", "minPartySize", "maxPartySize", "durationMinutes", "minLeadTimeMinutes", "today",
-        "lastBookableDate", "cancellationCutoffMinutes", "autoConfirm",
+        "lastBookableDate", "cancellationCutoffMinutes", "autoConfirm", "deposit",
     ];
 
     private static readonly string[] ConfirmationFields =
-        ["reference", "status", "venueName", "date", "time", "durationMinutes", "partySize", "timeZone", "startsAt", "manageToken"];
+        ["reference", "status", "venueName", "date", "time", "durationMinutes", "partySize", "timeZone", "startsAt", "manageToken", "payment"];
 
     private static readonly string[] BookingFields =
     [
         "reference", "status", "tenantSlug", "venueSlug", "venueName", "venuePhone", "venueEmail", "date", "time", "durationMinutes",
-        "partySize", "timeZone", "startsAt", "guestFirstName", "specialRequests", "canCancel", "cancelUntil", "cancelledAt",
+        "partySize", "timeZone", "startsAt", "guestFirstName", "specialRequests", "canCancel", "cancelUntil", "cancelledAt", "payment",
     ];
 
     // The A/B races send more public requests than the default per-IP limit allows from one test client.

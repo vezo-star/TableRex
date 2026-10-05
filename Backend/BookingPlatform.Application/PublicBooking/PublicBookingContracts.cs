@@ -23,7 +23,11 @@ public sealed record PublicVenueDto(
     DateOnly Today,
     DateOnly LastBookableDate,
     int CancellationCutoffMinutes,
-    bool AutoConfirm);
+    bool AutoConfirm,
+    PublicDepositDto? Deposit = null);
+
+/// <summary>The venue's deposit rule, shown before booking. <c>AmountMinor</c> is per booking or per guest.</summary>
+public sealed record PublicDepositDto(string Policy, long AmountMinor, string Currency, int PaymentWindowMinutes);
 
 public sealed record PublicTimeSlotDto(TimeOnly Time, DateTime StartsAt);
 
@@ -54,7 +58,8 @@ public sealed record PublicBookingConfirmationDto(
     int PartySize,
     string TimeZone,
     DateTime StartsAt,
-    string? ManageToken);
+    string? ManageToken,
+    Payments.PublicPaymentDto? Payment = null);
 
 /// <summary>The guest's view of their booking, opened with the manage token.</summary>
 public sealed record PublicBookingDto(
@@ -75,7 +80,8 @@ public sealed record PublicBookingDto(
     string? SpecialRequests,
     bool CanCancel,
     DateTime? CancelUntil,
-    DateTime? CancelledAt);
+    DateTime? CancelledAt,
+    Payments.PublicPaymentDto? Payment = null);
 
 /// <summary>The tenant and venue behind a pair of public slugs (or ids).</summary>
 public sealed record PublicVenueLocator(Guid TenantId, string TenantSlug, string TenantName, string TenantStatus, Guid VenueId, string VenueSlug);

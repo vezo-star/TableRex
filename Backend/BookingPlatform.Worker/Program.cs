@@ -1,3 +1,4 @@
+using BookingPlatform.Application;
 using BookingPlatform.Infrastructure;
 using BookingPlatform.Infrastructure.Housekeeping;
 using BookingPlatform.Infrastructure.Logging;
@@ -25,6 +26,7 @@ builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddPublicBookingTokens(builder.Configuration);
 builder.Services.AddNotifications(builder.Configuration);
 builder.Services.AddHostedService<NotificationOutboxDispatcher>();
+builder.Services.AddDepositExpiry();
 builder.Services.AddScoped<HousekeepingRepository>();
 builder.Services.AddOptions<HousekeepingOptions>()
     .Bind(builder.Configuration.GetSection(HousekeepingOptions.SectionName))

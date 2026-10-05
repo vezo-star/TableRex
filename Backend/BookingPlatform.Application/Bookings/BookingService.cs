@@ -7,6 +7,7 @@ using BookingPlatform.Application.Common.Pagination;
 using BookingPlatform.Application.Common.Persistence;
 using BookingPlatform.Application.Common.Security;
 using BookingPlatform.Application.Common.Validation;
+using BookingPlatform.Application.Payments;
 using BookingPlatform.Application.Venues;
 using BookingPlatform.Domain.Bookings;
 using BookingPlatform.Domain.Time;
@@ -26,7 +27,9 @@ public sealed partial class BookingService(
     IAllocationRepository allocations,
     IHoldRepository holds,
     IBookingCustomerRepository customers,
+    IPaymentRepository payments,
     BookingAllocator allocator,
+    BookingTransitions transitions,
     IVenueRepository venues,
     VenueService venueService,
     IVenueAccessGuard guard,
@@ -43,7 +46,7 @@ public sealed partial class BookingService(
     IValidator<CancelBookingRequest> cancelValidator,
     IValidator<BookingListQuery> listValidator)
 {
-    private const string EntityType = "booking";
+    internal const string EntityType = "booking";
     private const string NotFoundMessage = "The booking was not found.";
 
     public async Task<PagedResult<BookingDto>> ListAsync(BookingListQuery query, CancellationToken cancellationToken)
@@ -134,7 +137,13 @@ public sealed partial class BookingService(
                     timing.StartUtc, timing.EndUtc, timing.BusinessDateOnly, Clean(request.SpecialRequests), Clean(request.InternalNotes), userId, now)
                 {
                     PublicTokenHash = creation.PublicTokenHash,
+                    ExpiresAt = creation.Deposit?.ExpiresAt,
                 }, cancellationToken);
+                if (creation.Deposit is { } deposit)
+                {
+                    await payments.InsertAsync(new NewPayment(Guid.CreateVersion7(), tenantId, venue.Id, bookingId, PaymentPurposes.Deposit,
+                        deposit.Provider, deposit.AmountMinor, deposit.Currency, deposit.ExpiresAt, now), cancellationToken);
+                }
 
                 IReadOnlyList<AllocationCandidate> candidates;
                 if (hold is not null)
@@ -326,7 +335,7 @@ public sealed partial class BookingService(
     /// Applies a status command under a row lock. <paramref name="precondition"/> runs against the locked booking before
     /// anything changes (public cancellation uses it for the venue's cancellation policy).
     /// </summary>
-    internal async Task<BookingRecord> TransitionCoreAsync(
+    internal Task<BookingRecord> TransitionCoreAsync(
         Guid tenantId,
         Guid id,
         BookingCommand command,
@@ -335,72 +344,8 @@ public sealed partial class BookingService(
         Guid? userId,
         string historySource,
         Action<BookingRecord>? precondition,
-        CancellationToken cancellationToken)
-    {
-        return await TransientRetry.ExecuteAsync(
-            () => unitOfWork.ExecuteAsync(async () =>
-            {
-                var locked = await bookings.LockAsync(tenantId, id, cancellationToken)
-                    ?? throw new NotFoundAppException(ErrorCodes.BookingNotFound, NotFoundMessage);
-                EnsureVersion(version, locked.Version);
-                if (command == BookingCommand.Cancel && locked.Status == BookingStatus.Cancelled)
-                {
-                    throw new ConflictAppException(ErrorCodes.BookingAlreadyCancelled, "The booking is already cancelled.");
-                }
-
-                var to = BookingStatusMachine.TryApply(locked.Status, command)
-                    ?? throw new ConflictAppException(ErrorCodes.InvalidStatusTransition,
-                        $"A {Describe(locked.Status)} booking cannot be {Describe(command)}.");
-
-                var before = await LoadRecordAsync(tenantId, id, cancellationToken);
-                precondition?.Invoke(before);
-                var now = clock.UtcNow;
-                if (command == BookingCommand.NoShow && now < before.StartsAt)
-                {
-                    throw new ConflictAppException(ErrorCodes.InvalidStatusTransition, "A booking cannot be marked as a no-show before its start time.");
-                }
-
-                await bookings.UpdateStatusAsync(tenantId, id, to, command == BookingCommand.Cancel ? reason : null, now, cancellationToken);
-                switch (command)
-                {
-                    case BookingCommand.Cancel:
-                        await allocations.DeactivateAsync(tenantId, id, null, null, ReleaseReasons.Cancelled, now, cancellationToken);
-                        break;
-                    case BookingCommand.NoShow:
-                        await allocations.DeactivateAsync(tenantId, id, null, null, ReleaseReasons.NoShow, now, cancellationToken);
-                        break;
-                    case BookingCommand.Complete:
-                        var venue = await venues.GetAsync(tenantId, before.VenueId, cancellationToken);
-                        var turnover = TimeSpan.FromMinutes(venue?.Rules.TurnoverBufferMinutes ?? 0);
-                        var releaseAt = Max(now + turnover, before.StartsAt.AddMinutes(1));
-                        await allocations.TruncateBookingAsync(tenantId, id, releaseAt, cancellationToken);
-                        break;
-                }
-
-                await bookings.WriteStatusHistoryAsync(new StatusHistoryEntry(tenantId, before.VenueId, id, locked.Status, to, historySource, reason, userId), cancellationToken);
-                await bookings.WriteEventAsync(new BookingEventEntry(tenantId, before.VenueId, id,
-                    command == BookingCommand.Cancel ? BookingEventTypes.Cancelled : BookingEventTypes.StatusChanged,
-                    new { from = locked.Status, to, reason, plannedEndsAt = before.EndsAt }, userId), cancellationToken);
-
-                var after = await LoadRecordAsync(tenantId, id, cancellationToken);
-                await audit.WriteAsync(new AuditEntry(tenantId, EntityType, id,
-                    command == BookingCommand.Cancel ? AuditActions.Cancelled : AuditActions.StatusChanged, Snapshot(before), Snapshot(after)), cancellationToken);
-                await outbox.WriteRealtimeAsync(tenantId,
-                    command == BookingCommand.Cancel ? RealtimeEvents.BookingCancelled : RealtimeEvents.BookingStatusChanged,
-                    after.VenueId, id, after.Version, after.BusinessDate, now, cancellationToken);
-                if (command == BookingCommand.Cancel && after.CustomerId is not null)
-                {
-                    await outbox.WriteNotificationAsync(tenantId, NotificationTypes.BookingCancellation, after.VenueId, id, now, cancellationToken);
-                }
-                else if (command == BookingCommand.Confirm && locked.Status is BookingStatus.Pending or BookingStatus.Held && after.CustomerId is not null)
-                {
-                    await outbox.WriteNotificationAsync(tenantId, NotificationTypes.BookingConfirmation, after.VenueId, id, now, cancellationToken);
-                }
-
-                return after;
-            }, cancellationToken),
-            ConcurrencyConflict);
-    }
+        CancellationToken cancellationToken) =>
+        transitions.ApplyAsync(tenantId, id, command, new TransitionContext(historySource, userId, reason, version) { Precondition = precondition }, cancellationToken);
 
     private async Task<BookingRecord> LockMutableAsync(Guid tenantId, Guid id, int? version, CancellationToken cancellationToken)
     {
@@ -513,16 +458,9 @@ public sealed partial class BookingService(
         return new AllocationRequest(AllocationModes.Resources, resourceIds);
     }
 
-    private static void EnsureVersion(int? expected, int actual)
-    {
-        if (expected is { } version && version != actual)
-        {
-            throw new ConflictAppException(ErrorCodes.ConcurrencyConflict, "The booking was changed by someone else. Reload and try again.");
-        }
-    }
+    private static void EnsureVersion(int? expected, int actual) => BookingTransitions.EnsureVersion(expected, actual);
 
-    private static Exception ConcurrencyConflict() =>
-        new ConflictAppException(ErrorCodes.ConcurrencyConflict, "The booking is being changed by someone else. Try again.");
+    private static Exception ConcurrencyConflict() => BookingTransitions.ConcurrencyConflict();
 
     public static BookingDto ToDto(BookingRecord r)
     {
@@ -535,7 +473,7 @@ public sealed partial class BookingService(
     }
 
     /// <summary>Audit values: booking facts and ids only (no customer contact details or notes).</summary>
-    private static object Snapshot(BookingRecord r) => new
+    internal static object Snapshot(BookingRecord r) => new
     {
         r.Reference,
         r.Status,
@@ -551,8 +489,6 @@ public sealed partial class BookingService(
 
     private static TimeOnly LocalTimeOf(DateTime utc, DateTimeZone zone) =>
         Instant.FromDateTimeUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc)).InZone(zone).TimeOfDay.ToTimeOnly();
-
-    private static DateTime Max(DateTime a, DateTime b) => a > b ? a : b;
 
     private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
@@ -570,18 +506,7 @@ public sealed partial class BookingService(
         return PhonePattern().IsMatch(normalized) ? normalized : null;
     }
 
-    private static string Describe(string status) => status.ToLowerInvariant().Replace('_', ' ');
-
-    private static string Describe(BookingCommand command) => command switch
-    {
-        BookingCommand.Confirm => "confirmed",
-        BookingCommand.CheckIn => "checked in",
-        BookingCommand.Seat => "seated",
-        BookingCommand.Complete => "completed",
-        BookingCommand.NoShow => "marked as a no-show",
-        BookingCommand.Cancel => "cancelled",
-        _ => "changed",
-    };
+    private static string Describe(string status) => BookingTransitions.Describe(status);
 
     [GeneratedRegex("[^0-9]")]
     private static partial Regex NonDigits();

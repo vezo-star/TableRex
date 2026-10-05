@@ -7,6 +7,7 @@ using BookingPlatform.Application.Common.Errors;
 using BookingPlatform.Application.Common.Idempotency;
 using BookingPlatform.Application.Common.RateLimiting;
 using BookingPlatform.Application.Common.Validation;
+using BookingPlatform.Application.Payments;
 using BookingPlatform.Application.Venues;
 using BookingPlatform.Domain.Bookings;
 using BookingPlatform.Domain.Identity;
@@ -33,6 +34,8 @@ public sealed partial class PublicBookingService(
     AvailabilityService availability,
     BookingService bookingService,
     IBookingRepository bookings,
+    PaymentService paymentService,
+    IPaymentRepository payments,
     IPublicBookingTokens tokens,
     IRateLimiter rateLimiter,
     IOptions<PublicBookingOptions> options,
@@ -50,10 +53,14 @@ public sealed partial class PublicBookingService(
         var (locator, venue) = await ResolveAsync(tenantSlug, venueSlug, cancellationToken);
         var rules = venue.Rules;
         var today = Today(venue);
+        var settings = await payments.GetSettingsAsync(locator.TenantId, venue.Id, cancellationToken);
+        var deposit = settings.DepositPolicy != DepositPolicies.None && settings.DepositAmountMinor is { } amount
+            ? new PublicDepositDto(settings.DepositPolicy, amount, settings.Currency, settings.PaymentWindowMinutes)
+            : null;
         return new PublicVenueDto(locator.TenantSlug, locator.TenantName, venue.Slug, venue.Name, venue.Description, venue.AddressLine1,
             venue.AddressLine2, venue.City, venue.Region, venue.PostalCode, venue.CountryCode, venue.Phone, venue.Email, venue.TimeZone,
             rules.MinPartySize, rules.MaxPartySize, rules.DefaultDurationMinutes, rules.MinLeadTimeMinutes, today,
-            today.AddDays(rules.MaxAdvanceDays), rules.PublicCancellationCutoffMinutes, rules.AutoConfirmPublicBookings);
+            today.AddDays(rules.MaxAdvanceDays), rules.PublicCancellationCutoffMinutes, rules.AutoConfirmPublicBookings, deposit);
     }
 
     public async Task<PublicAvailabilityDto> GetAvailabilityAsync(string tenantSlug, string venueSlug, DateOnly date, int partySize, CancellationToken cancellationToken)
@@ -110,7 +117,10 @@ public sealed partial class PublicBookingService(
 
         var bookingId = Guid.CreateVersion7();
         var token = tokens.Create(bookingId);
-        var status = venue.Rules.AutoConfirmPublicBookings ? BookingStatus.Confirmed : BookingStatus.Pending;
+        var deposit = await paymentService.QuoteDepositAsync(tenantId, venue.Id, request.PartySize, cancellationToken);
+        var status = deposit is not null ? BookingStatus.Held
+            : venue.Rules.AutoConfirmPublicBookings ? BookingStatus.Confirmed
+            : BookingStatus.Pending;
         var engineRequest = new CreateBookingRequest(venue.Id,
             new BookingCustomerInput(null, request.FirstName.Trim(), Clean(request.LastName), request.Email.Trim(), Clean(request.Phone)),
             request.Date, request.Time, null, request.PartySize, Source: BookingSource.Public, Status: status, SpecialRequests: request.SpecialRequests);
@@ -122,26 +132,36 @@ public sealed partial class PublicBookingService(
             OnlineOnly = true,
             MarketingConsent = request.MarketingConsent,
             MaxActiveBookingsPerCustomer = options.Value.MaxActiveBookingsPerContact,
+            Deposit = deposit,
         };
 
         var result = await bookingService.CreateCoreAsync(creation, idempotencyRequest,
-            record => ToConfirmation(record, venue, token),
+            record => ToConfirmation(record, venue, token,
+                deposit is null ? null : new PublicPaymentDto(PaymentStatus.Created, deposit.AmountMinor, deposit.Currency, deposit.ExpiresAt, CanPay: true)),
             confirmation => confirmation with { ManageToken = null },
             cancellationToken);
         if (result.Replay is { ResourceId: { } replayedId })
         {
             var original = await bookings.GetAsync(tenantId, replayedId, cancellationToken)
                 ?? throw new NotFoundAppException(ErrorCodes.BookingNotFound, BookingNotFoundMessage);
-            return new PublicBookingResult(ToConfirmation(original, venue, tokens.Create(replayedId)), Replayed: true);
+            var payment = await paymentService.GetPublicPaymentAsync(tenantId, original, cancellationToken);
+            return new PublicBookingResult(ToConfirmation(original, venue, tokens.Create(replayedId), payment), Replayed: true);
         }
 
         return new PublicBookingResult(result.Value!, Replayed: false);
     }
 
+    /// <summary>Starts the provider checkout for the deposit of a HELD booking; returns where to send the guest.</summary>
+    public async Task<PublicCheckoutDto> StartPaymentAsync(string? token, CancellationToken cancellationToken)
+    {
+        var (record, locator, venue) = await FindByTokenAsync(token, cancellationToken);
+        return await paymentService.StartPublicCheckoutAsync(locator.TenantId, record, venue.Name, cancellationToken);
+    }
+
     public async Task<PublicBookingDto> GetBookingAsync(string? token, CancellationToken cancellationToken)
     {
         var (record, locator, venue) = await FindByTokenAsync(token, cancellationToken);
-        return ToPublic(record, locator, venue);
+        return await ToPublicAsync(record, locator, venue, cancellationToken);
     }
 
     /// <summary>Guest cancellation within the venue's cutoff. Cancelling an already cancelled booking returns it unchanged.</summary>
@@ -150,12 +170,12 @@ public sealed partial class PublicBookingService(
         var (record, locator, venue) = await FindByTokenAsync(token, cancellationToken);
         if (record.Status == BookingStatus.Cancelled)
         {
-            return ToPublic(record, locator, venue);
+            return await ToPublicAsync(record, locator, venue, cancellationToken);
         }
 
         var after = await bookingService.TransitionCoreAsync(locator.TenantId, record.Id, BookingCommand.Cancel, GuestCancellationReason, null, null,
             HistorySources.Public, locked => EnsureGuestCanCancel(locked, venue), cancellationToken);
-        return ToPublic(after, locator, venue);
+        return await ToPublicAsync(after, locator, venue, cancellationToken);
     }
 
     private void EnsureGuestCanCancel(BookingRecord booking, VenueDto venue)
@@ -214,18 +234,19 @@ public sealed partial class PublicBookingService(
         return (record, locator, venue);
     }
 
-    private PublicBookingDto ToPublic(BookingRecord r, PublicVenueLocator locator, VenueDto venue)
+    private async Task<PublicBookingDto> ToPublicAsync(BookingRecord r, PublicVenueLocator locator, VenueDto venue, CancellationToken cancellationToken)
     {
         var cancelUntil = CancelUntil(r, venue);
         var canCancel = CancellableStatuses.Contains(r.Status) && clock.UtcNow < cancelUntil;
+        var payment = await paymentService.GetPublicPaymentAsync(locator.TenantId, r, cancellationToken);
         return new PublicBookingDto(r.Reference, r.Status, locator.TenantSlug, locator.VenueSlug, venue.Name, venue.Phone, venue.Email,
             r.BusinessDate, LocalTimeOf(r.StartsAt, venue.TimeZone), (int)(r.EndsAt - r.StartsAt).TotalMinutes, r.PartySize, venue.TimeZone,
-            r.StartsAt, r.Customer?.FirstName ?? "Guest", r.SpecialRequests, canCancel, canCancel ? cancelUntil : null, r.CancelledAt);
+            r.StartsAt, r.Customer?.FirstName ?? "Guest", r.SpecialRequests, canCancel, canCancel ? cancelUntil : null, r.CancelledAt, payment);
     }
 
-    private static PublicBookingConfirmationDto ToConfirmation(BookingRecord r, VenueDto venue, string token) =>
+    private static PublicBookingConfirmationDto ToConfirmation(BookingRecord r, VenueDto venue, string token, PublicPaymentDto? payment) =>
         new(r.Reference, r.Status, venue.Name, r.BusinessDate, LocalTimeOf(r.StartsAt, venue.TimeZone), (int)(r.EndsAt - r.StartsAt).TotalMinutes,
-            r.PartySize, venue.TimeZone, r.StartsAt, token);
+            r.PartySize, venue.TimeZone, r.StartsAt, token, payment);
 
     private static DateTime CancelUntil(BookingRecord booking, VenueDto venue) =>
         booking.StartsAt.AddMinutes(-venue.Rules.PublicCancellationCutoffMinutes);

@@ -1,4 +1,5 @@
 using BookingPlatform.Application.Common.Time;
+using BookingPlatform.Application.Payments;
 using BookingPlatform.Infrastructure.Housekeeping;
 using Microsoft.Extensions.Options;
 
@@ -54,6 +55,15 @@ public sealed class HousekeepingWorker(
                 }
             }, stoppingToken);
 
+            await RunSafelyAsync("deposit expiry", async services =>
+            {
+                var expired = await services.GetRequiredService<DepositExpiryService>().ExpireDueAsync(settings.BatchSize, stoppingToken);
+                if (expired > 0)
+                {
+                    logger.LogInformation("Cancelled {BookingCount} held bookings whose deposit was not paid in time", expired);
+                }
+            }, stoppingToken);
+
             if (clock.UtcNow >= nextPurge)
             {
                 nextPurge = clock.UtcNow + purgeInterval;
@@ -74,12 +84,15 @@ public sealed class HousekeepingWorker(
         while (await WaitAsync(timer, stoppingToken));
     }
 
-    private async Task RunSafelyAsync(string job, Func<HousekeepingRepository, Task> action, CancellationToken stoppingToken)
+    private Task RunSafelyAsync(string job, Func<HousekeepingRepository, Task> action, CancellationToken stoppingToken) =>
+        RunSafelyAsync(job, services => action(services.GetRequiredService<HousekeepingRepository>()), stoppingToken);
+
+    private async Task RunSafelyAsync(string job, Func<IServiceProvider, Task> action, CancellationToken stoppingToken)
     {
         try
         {
             await using var scope = scopeFactory.CreateAsyncScope();
-            await action(scope.ServiceProvider.GetRequiredService<HousekeepingRepository>());
+            await action(scope.ServiceProvider);
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {

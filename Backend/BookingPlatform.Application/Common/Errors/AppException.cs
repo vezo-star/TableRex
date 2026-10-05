@@ -54,6 +54,9 @@ public sealed class GoneAppException(string code, string message) : AppException
 
 public sealed class LockedAppException(string code, string message) : AppException(code, message);
 
+/// <summary>503: a dependency outside our control (a payment provider) is unavailable; the client may retry.</summary>
+public sealed class ServiceUnavailableAppException(string code, string message) : AppException(code, message);
+
 public sealed class RateLimitedAppException(int retryAfterSeconds)
     : AppException(ErrorCodes.RateLimited, "Too many requests. Please wait and try again.")
 {

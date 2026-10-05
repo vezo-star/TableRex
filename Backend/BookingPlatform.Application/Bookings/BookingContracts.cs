@@ -206,6 +206,9 @@ internal sealed record BookingCreation(
 
     /// <summary>Rejects the booking when the customer already has this many upcoming active bookings at the venue.</summary>
     public int? MaxActiveBookingsPerCustomer { get; init; }
+
+    /// <summary>A deposit created with the booking (status HELD until paid; <c>ExpiresAt</c> becomes the booking's expiry).</summary>
+    public Payments.DepositRequirement? Deposit { get; init; }
 }
 
 public sealed record NewBooking(
@@ -226,6 +229,9 @@ public sealed record NewBooking(
 {
     /// <summary>SHA-256 of the guest's manage-booking token (public bookings only).</summary>
     public byte[]? PublicTokenHash { get; init; }
+
+    /// <summary>Required for HELD bookings: when the hold lapses unless confirmed.</summary>
+    public DateTime? ExpiresAt { get; init; }
 }
 
 public sealed record StatusHistoryEntry(Guid TenantId, Guid VenueId, Guid BookingId, string? FromStatus, string ToStatus, string Source, string? Reason, Guid? UserId);
@@ -312,6 +318,7 @@ public static class ReleaseReasons
     public const string HoldReleased = "HOLD_RELEASED";
     public const string HoldConverted = "HOLD_CONVERTED";
     public const string BlockCancelled = "BLOCK_CANCELLED";
+    public const string Expired = "EXPIRED";
 }
 
 public interface IAllocationRepository

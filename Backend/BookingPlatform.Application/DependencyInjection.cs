@@ -4,6 +4,7 @@ using BookingPlatform.Application.Bookings;
 using BookingPlatform.Application.Common.Idempotency;
 using BookingPlatform.Application.Customers;
 using BookingPlatform.Application.Identity;
+using BookingPlatform.Application.Payments;
 using BookingPlatform.Application.PublicBooking;
 using BookingPlatform.Application.Tenancy;
 using BookingPlatform.Application.Venues;
@@ -29,7 +30,9 @@ public static class DependencyInjection
         services.AddScoped<AvailabilityService>();
         services.AddScoped<IdempotencyGuard>();
         services.AddScoped<BookingAllocator>();
+        services.AddScoped<BookingTransitions>();
         services.AddScoped<BookingService>();
+        services.AddScoped<PaymentService>();
         services.AddScoped<HoldService>();
         services.AddScoped<BlockService>();
         services.AddScoped<BoardService>();
@@ -37,6 +40,14 @@ public static class DependencyInjection
         services.AddScoped<AuditLogService>();
         services.AddScoped<PublicBookingService>();
 
+        return services;
+    }
+
+    /// <summary>The Worker's slice of the application layer: booking status transitions and deposit expiry.</summary>
+    public static IServiceCollection AddDepositExpiry(this IServiceCollection services)
+    {
+        services.AddScoped<BookingTransitions>();
+        services.AddScoped<DepositExpiryService>();
         return services;
     }
 
