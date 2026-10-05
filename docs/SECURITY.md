@@ -133,6 +133,18 @@ OWNER vs ADMIN difference: ownership transfer and tenant deletion/suspension req
 - **Refunds** need `payment.refund`, an `Idempotency-Key`, and a refundable amount that already counts pending refunds. An unknown provider outcome stays pending and is flagged (D-086).
 - **Simulated is not deployable.** It is not registered in Production, so configuring it there fails startup (D-084). Production leaves `Payments__Provider` empty until a real adapter is added; provider keys will be secrets like any other.
 
+### Plans, branding and reports (Phase 11)
+
+- **Who can do what.** Plans and overrides are changed only by platform admins (`[RequirePlatformAdmin]`). Tenants can read their plan and usage, and edit branding, with `settings.manage`. Reports need `reports.view` and honour venue scope, so an out-of-scope or foreign venue is 404. Plan and branding changes are audited (`tenant_subscription`, `tenant_branding`).
+- **Limits cannot be raced.** Each check counts under the tenant row lock in the same transaction as the insert (D-089).
+- **Branding is untrusted tenant input shown to the public.**
+  - The server validates every field: colour `#rrggbb`; logo `https://` only, with no whitespace, quotes, `<>()`, backticks or user-info, so it cannot break out of an attribute or a CSS `url()`; length limits on all fields.
+  - The database checks colour, scheme and length again.
+  - The SPA renders intro and terms as text (never `v-html`), loads the logo with `referrerpolicy="no-referrer"` so guest URLs don't leak to the image host, and applies a colour only when it keeps white text readable.
+  - Because tenant logos live on other hosts, the SPA's CSP `img-src` allows `https:`. `script-src`, `connect-src` and `frame-ancestors` are unchanged. Loading a logo reveals the guest's IP address to the logo host, which is an accepted trade-off for tenant-hosted branding.
+- **CSV export.** No email addresses or phone numbers. Every cell is quoted, and cells starting with `=`, `+`, `-`, `@`, tab or carriage return get a leading `'`, so spreadsheets don't evaluate them as formulas (CSV injection). At most 20 000 rows; served `Cache-Control: no-store`.
+- **Public tenant page.** It lists only active venues with online booking on, shows no ids and returns the same 404 `TENANT_NOT_FOUND` for unknown, malformed and suspended tenants.
+
 ## 7. Secrets & configuration
 
 - No secrets in source control. `.env.example` / `appsettings*.json` contain placeholders only.

@@ -82,7 +82,7 @@ Code is organised by feature folder in each layer so modules could be extracted 
 
 `Identity` (users, auth, tokens), `Tenancy` (tenants, memberships, roles, permissions), `Venues` (venues, sections, hours),
 `Resources` (types, resources, combinations, blocks, floor plans), `Availability`, `Bookings` (bookings, holds, allocations, history),
-`Customers`, `Audit`, `Outbox`, `Notifications`, `Realtime`.
+`Customers`, `Audit`, `Outbox`, `Notifications`, `Realtime`, `Payments`, `Subscriptions` (plans, limits, branding), `Reports`.
 
 Modules talk through Application interfaces, not each other's repositories/tables, except where a single transaction must span them (booking creation writes customer, booking, allocation, audit and outbox — orchestrated by `BookingService` through one unit of work).
 
@@ -186,3 +186,5 @@ Key behaviours:
 Notifications (`NotificationService` + `IEmailProvider`), payments (`IPaymentProvider`), external API clients (API keys/service credentials, later), webhooks, POS/CRM/calendar connectors — each behind an Application interface fed by outbox events. The booking engine never calls an external system inside its transaction.
 
 Payments (Phase 10) follow the same rule. `PaymentService` locks the booking, writes the payment and commits, then calls the provider outside the transaction, then records the outcome in a new transaction. Webhooks come in through `POST /api/v1/payments/webhooks/{provider}`, are verified by the provider adapter and are applied together with the booking transition in one transaction (`BookingTransitions.ApplyInTransactionAsync`). The Worker expires unpaid deposits through the same transitions. Adding a provider means one `IPaymentProvider` class plus its options in `AddPayments` (D-082).
+
+SaaS features (Phase 11) sit beside the booking domain, not inside it (D-088). `Subscriptions` owns plans, per-tenant overrides and branding. Its only hook into other modules is `PlanLimits`, which `VenueService`, `StaffService` and `ResourceService` call before an insert, under the tenant row lock. Availability, holds, bookings, payments and notifications never read a plan. `Reports` reads `bookings` and `payments` with aggregate SQL and writes nothing. The public booking module asks `SubscriptionService` for the tenant's public branding, which is null when the plan lacks the feature. Billing, if added, would only write `tenant_subscriptions`.

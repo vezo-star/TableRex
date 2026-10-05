@@ -1,6 +1,6 @@
 # Testing
 
-Status: **Phases 1–10 implemented** (282 backend tests, 210 Vitest tests at the end of Phase 10). Each phase adds the tests listed for it; a phase is not complete while any test fails.
+Status: **Phases 1–11 implemented** (314 backend tests, 242 Vitest tests at the end of Phase 11). Each phase adds the tests listed for it; a phase is not complete while any test fails.
 
 ## 0. Running the suites
 
@@ -136,6 +136,19 @@ Vitest: `services/publicBookingService.spec.js` (anonymous calls, token only in 
 Unit (`Payments/PaymentPrimitivesTests.cs`): deposit amounts per policy, `PaymentOptions` validity, sign/verify round trip, tampering, foreign secret, replay window, malformed payloads, checkout tokens, and `Expire` allowed only from `HELD`.
 
 Vitest: `utils/payments.spec.js` (money parsing without float drift, notices, token parking, fragment parsing, same-origin return URLs) and `components/paymentComponents.spec.js` (pay card, return page, Simulated checkout incl. a cross-origin return URL being ignored, staff payments panel with a partial refund and idempotency key, deposit settings in minor units), plus the deposit cases in `pages/publicBookingPages.spec.js`.
+
+## 6c. SaaS tests (Phase 11)
+
+`Saas/SaasTests.cs`:
+- **Limits**: a STARTER tenant gets 422 `PLAN_LIMIT_REACHED` on its second venue, and a platform override lifts that (audited). Six parallel venue creates at a limit of 1 → exactly 1 created and 5 × 422. Staff limits apply on create and on reactivation, and resource limits apply per venue on create and on reactivation.
+- **Branding**: STARTER → 422 `PLAN_FEATURE_UNAVAILABLE`. Validation rejects a named colour, `javascript:`, `http:`, an attribute-breaking quote and over-long terms. Saved values appear on the public venue and tenant pages (no tenant id leaked), and a downgrade hides them while keeping them stored.
+- **Public tenant page**: lists only active venues with online booking on, ordered by name; unknown and suspended tenants → 404 `TENANT_NOT_FOUND`.
+- **Platform**: creating a tenant with and without `planCode` (default STARTER), an unknown plan → 400, the reserved slug → 400, the plans list, and 401 when anonymous.
+- **Reports**: summary numbers (a no-show is set via SQL) match the seeded bookings. Permissions: HOST → 403, a venue outside a manager's scope or another tenant's venue → 404 (summary and CSV). The CSV has a UTF-8 BOM, neutralises formulas, quotes commas and contains no email addresses.
+
+Unit (`Saas/SaasPrimitivesTests.cs`): `ReportService.Cell` escaping, `IsSafeLogoUrl`, effective limits with overrides, and the 366-day range validator.
+
+Vitest: `utils/saas.spec.js` (contrast and colour safety, logo URL safety, ranges, percentages, hour filling, usage text, `fileNameFrom`) and `pages/saasPages.spec.js` (Reports page incl. range error and CSV, plan and branding cards incl. the upgrade state, public locations page and branded header, platform plan dialog with overrides).
 
 ## 7. Frontend tests
 

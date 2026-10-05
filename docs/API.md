@@ -58,6 +58,8 @@ Public endpoints never include internal ids such as `conflictingResourceIds`.
 | CANCELLATION_NOT_ALLOWED | 422 |
 | PAYMENT_NOT_PAYABLE | 422 |
 | REFUND_NOT_ALLOWED | 422 |
+| PLAN_LIMIT_REACHED | 422 (the tenant's plan does not allow another venue, active staff member or active resource) |
+| PLAN_FEATURE_UNAVAILABLE | 422 (the tenant's plan does not include the feature, e.g. custom branding) |
 | UNAUTHORIZED | 401 |
 | INVALID_WEBHOOK_SIGNATURE | 401 |
 | INVALID_CREDENTIALS | 401 |
@@ -131,7 +133,7 @@ Email verification is not implemented (D-080).
 | POST | `/api/v1/staff/{tenantUserId}/deactivate` | staff.manage — revokes that user's sessions for the tenant; cannot deactivate yourself or the last owner (422) |
 | POST | `/api/v1/staff/{tenantUserId}/activate` | staff.manage |
 | GET | `/api/v1/roles` | staff.view — system roles with their permissions |
-| GET / POST | `/api/v1/platform/tenants` | platform admin only — list tenants; create a tenant with its first owner (`{ name, slug, defaultTimeZone, owner: { email, displayName, password? } }`) |
+| GET / POST | `/api/v1/platform/tenants` | platform admin only — list tenants (each with `planCode`); create a tenant with its first owner (`{ name, slug, defaultTimeZone, owner: { email, displayName, password? }, planCode? }`). `planCode` defaults to the default plan (`STARTER`); an unknown plan is 400 on `planCode`. The slug `booking` is reserved. |
 
 Permission failures: 401 `UNAUTHORIZED` (no/invalid token), 403 `TENANT_SELECTION_REQUIRED` (tenant endpoint without `tid`), 403 `FORBIDDEN` (missing permission, or a `tid` the user is not an active member of).
 
@@ -306,11 +308,29 @@ Refund body: `{ amountMinor?, reason? }`. When `amountMinor` is omitted, everyth
 
 Webhooks: an unknown provider is 404 and a bad signature or replayed timestamp is 401 `INVALID_WEBHOOK_SIGNATURE`. A valid delivery answers 200 `{ received, applied }`, including duplicates and unmatched events, so providers stop retrying. The audit trail records `payment.checkout_started`, `payment.succeeded`, `payment.failed`, `payment.flagged`, `payment.refund_requested`, `payment.refunded`, `payment.refund_failed` and `payment.settings.updated`.
 
-### Reports (Phase 11)
+### Plans, subscription and branding (Phase 11 — implemented)
 
 | Method | Path | Permission |
 |---|---|---|
-| GET | `/api/v1/reports/...` | reports.view |
+| GET | `/api/v1/plans` | authenticated — `[{ code, name, description, maxVenues, maxActiveStaff, maxResourcesPerVenue, customBranding }]` (`null` = unlimited) |
+| GET | `/api/v1/tenants/current/subscription` | settings.manage |
+| GET / PUT | `/api/v1/tenants/current/branding` | settings.manage — PUT is 422 `PLAN_FEATURE_UNAVAILABLE` when the plan has no custom branding; audited as `tenant_branding` |
+| GET / PUT | `/api/v1/platform/tenants/{tenantId}/subscription` | platform admin only — PUT `{ planCode, maxVenuesOverride?, maxActiveStaffOverride?, maxResourcesPerVenueOverride? }` (overrides 1–100 000, `null` = use the plan); audited as `tenant_subscription` |
+
+Subscription: `{ plan, limits: { maxVenues, maxActiveStaff, maxResourcesPerVenue }, overrides: { … }, usage: { venues, activeStaff, maxResourcesInAVenue, bookingsThisMonth }, updatedAt }`. `limits` are the effective values (override, else plan). `bookingsThisMonth` counts non-cancelled bookings whose business date falls in the current month in the tenant's time zone.
+
+Branding body: `{ primaryColor?, logoUrl?, bookingPageIntro?, bookingTerms? }`. Colour `#rrggbb` (stored lower-case); logo an `https://` URL ≤ 500 chars without whitespace, quotes, `<>()` or backticks and without user-info; intro ≤ 1000; terms ≤ 2000. `null` or blank clears a field. The response adds `enabled` (plan allows branding) and `updatedAt`.
+
+Plan limits (D-089) are checked when creating a venue, creating or reactivating a staff membership, and creating or reactivating a resource → 422 `PLAN_LIMIT_REACHED` with a message naming the plan and the limit. Lowering a limit never removes anything.
+
+### Reports (Phase 11 — implemented)
+
+| Method | Path | Permission |
+|---|---|---|
+| GET | `/api/v1/reports/bookings-summary?venueId&from&to` | reports.view (venue scope applies; out-of-scope venue → 404) |
+| GET | `/api/v1/reports/bookings.csv?venueId&from&to` | reports.view — `text/csv; charset=utf-8`, `Cache-Control: no-store`, attachment `bookings-{venueSlug}-{from}-{to}.csv` |
+
+`from`/`to` are inclusive business dates; `to < from` or a range over 366 days is 400 on `to`. Summary: `{ venueId, venueName, timeZone, from, to, totalBookings, bookings, covers, cancelled, noShows, cancellationRate, noShowRate, averagePartySize, byStatus: [{ key, bookings, covers }], bySource, daily: [{ date, bookings, covers, cancelled, noShows }], byHour: [{ hour, bookings, covers }], deposits: [{ currency, paidCount, collectedMinor, refundedMinor }] }`. Rates are fractions 0–1; `byHour` is the venue-local start hour. `bookings`/`covers` exclude cancelled bookings; `cancellationRate` = cancelled / total; `noShowRate` = no-shows / non-cancelled (D-090). The CSV has one row per booking (reference, date, time, duration, party size, status, source, guest name, created, cancelled), no email or phone, formula-injection escaping and at most 20 000 rows.
 
 ## 4. Public API (Phase 8 — implemented)
 
@@ -318,7 +338,8 @@ Webhooks: an unknown provider is 404 and a bad signature or replayed timestamp i
 
 | Method | Path | Rate-limit policy (per IP) | Notes |
 |---|---|---|---|
-| GET | `/api/v1/public/{tenantSlug}/{venueSlug}` | `public-read` 120/min | Venue name, description, address, contact, `timeZone`, party size limits, `durationMinutes`, `minLeadTimeMinutes`, `today`, `lastBookableDate`, `cancellationCutoffMinutes`, `autoConfirm` |
+| GET | `/api/v1/public/{tenantSlug}` | `public-read` 120/min | Tenant locations page (Phase 11): `{ slug, name, branding, venues: [{ slug, name, description, city, countryCode, timeZone }] }` — only active venues with online booking on (max 200). Unknown, malformed or non-active tenant → 404 `TENANT_NOT_FOUND` |
+| GET | `/api/v1/public/{tenantSlug}/{venueSlug}` | `public-read` 120/min | `branding` (Phase 11: `{ primaryColor, logoUrl, bookingPageIntro, bookingTerms }`, or null when the plan has no branding or nothing is set), venue name, description, address, contact, `timeZone`, party size limits, `durationMinutes`, `minLeadTimeMinutes`, `today`, `lastBookableDate`, `cancellationCutoffMinutes`, `autoConfirm` |
 | GET | `/api/v1/public/{tenantSlug}/{venueSlug}/availability?date&partySize` | `public-read` 120/min | `{ date, timeZone, partySize, durationMinutes, isClosed, times: [{ time, startsAt }] }` — only bookable times, computed on online-bookable resources and combinations, honouring lead time |
 | POST | `/api/v1/public/{tenantSlug}/{venueSlug}/bookings` | `public-booking` 10 per 10 min | `Idempotency-Key` required; 201 with `Cache-Control: no-store`; replay adds `Idempotent-Replayed: true` |
 | GET | `/api/v1/public/booking` | `public-manage` 60/min | Header `X-Booking-Token: <manage token>` |

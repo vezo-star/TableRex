@@ -19,8 +19,8 @@ The next phase starts only after the explicit instruction **"PROCEED TO NEXT PHA
 | 7 | Real-time | **Complete** (2026-10-05) |
 | 8 | Public Booking | **Complete** (2026-10-05) |
 | 9 | Outbox & Notifications | **Complete** (2026-10-05) |
-| 10 | Payments (abstractions) | Not started |
-| 11 | SaaS Features | Not started |
+| 10 | Payments (abstractions) | **Complete** (2026-10-05) |
+| 11 | SaaS Features | **Complete** (2026-10-05) |
 | 12 | Production Hardening | Not started |
 
 Every phase's Definition of Done: compiles, all tests pass, migrations apply from empty DB, functionality verified (manual smoke test where applicable), security checks for the phase, tenant isolation tested where relevant, docs updated, no critical TODOs, phase completion report delivered.
@@ -192,6 +192,29 @@ Completion notes (2026-10-05):
 
 Plans, tenant/venue/staff/resource limits, branding, custom booking pages, tenant settings, usage metrics, reporting read models, analytics. Kept outside the core booking domain.
 
+Completion notes (2026-10-05):
+- Backend:
+  - Schema: V031 (`plans` seeded with STARTER / PROFESSIONAL / ENTERPRISE, `tenant_subscriptions` with per-tenant overrides, `tenant_branding`). Existing tenants were backfilled to PROFESSIONAL.
+  - Application: a `Subscriptions` module (`SubscriptionService`, `PlanLimits`) and a `Reports` module (`ReportService`). The booking engine has no dependency on either (D-088).
+  - Limits are checked under the tenant row lock (`FOR NO KEY UPDATE`) when venues are created, staff memberships are created or reactivated, and resources are created or reactivated → 422 `PLAN_LIMIT_REACHED` (D-089).
+  - Endpoints: plans list, current subscription and usage, branding (422 `PLAN_FEATURE_UNAVAILABLE` without the feature), platform plan and overrides, reports summary and CSV, and the public tenant locations page `GET /public/{tenantSlug}`. Platform tenant creation accepts `planCode`, and the slug `booking` is reserved.
+  - Verification: Release build has 0 warnings and all 314 backend tests pass. New: 10 `SaasTests`, including 6 concurrent venue creates at a limit of 1 giving exactly 1 success; 22 unit tests for CSV escaping, logo URL safety, overrides and the range validator.
+- Frontend:
+  - New screens: a Reports page (KPIs, daily, hour-of-day, status and source breakdowns, deposits, CSV download, 7/30/90-day presets, 366-day guard); "Plan & usage" and "Booking page branding" cards in Settings; a plan column and plan/override dialog for platform admins, plus a plan choice when creating a tenant; the public locations page `/book/{tenantSlug}`; and a branded header and booking terms on the public booking page.
+  - The brand colour is applied only when white text on it is readable (contrast ≥ 3:1).
+  - Verification: all 242 Vitest tests pass (32 new); ESLint, Prettier and `quasar build` are clean.
+- Browser check (dev stack, throwaway admin):
+  - Reports for Demo Restaurant (20 Sep – 20 Oct) matched SQL exactly: 8 bookings, 5 cancelled (62.5 %), 3 active with 6 guests, hours 18:00 → 2 and 19:00 → 4, R100 deposit collected and R40 refunded. The CSV had the right headers, `no-store`, 8 rows and no contact details.
+  - Settings showed Professional with usage 2/5 venues, 6/25 staff and 16/100 resources. Saving branding was audited as `tenant_branding`.
+  - At 360 px, `/book/demo-hospitality` showed the logo, intro, green accent and both venues. The venue page showed the branded header, the link back to the tenant, green time slots and the booking terms in the guest form, with no horizontal overflow.
+  - Plan limits: the throwaway account was made platform admin temporarily (revoked afterwards). It set a venue override of 2 in the plan dialog (audited as `tenant_subscription`); "Add venue" then showed "Your Professional plan allows 2 venues. Upgrade the plan to add another venue." Clearing the override stored NULL again.
+- Found and fixed:
+  - The development Api does not run migrations; V031 had to be applied with the migrator CLI.
+  - The public booking page linked to a route that the page tests' router lacked.
+  - The public locations test assumed an order among venues the test helper had given identical names; the helper now names venues after their slug.
+- Not built: billing, invoices and trials (D-088); materialised reporting read models, because on-demand SQL is enough at this scale (D-090); tenant custom roles (system roles still suffice).
+- Decisions: D-088 – D-091.
+
 ## Phase 12 — Production Hardening
 
 Full review against the checklist in the master specification §67 Phase 12 and the 20 final architectural questions (§100); load/concurrency testing; RLS evaluation (D-024); backups/PITR; runbooks; `DEPLOYMENT.md` finalised.
@@ -207,7 +230,9 @@ Full review against the checklist in the master specification §67 Phase 12 and 
 | Restricting check-in/seat to the booking's business date | Product decision | D-058; staff may seat early today |
 | Recurring resource blocks | Post-MVP | Not required initially |
 | Per-slot pacing / covers limits | Post-MVP | Booking rule extension; engine designed to accept more rules |
-| Tenant custom roles | Phase 11 | System roles suffice initially |
+| Tenant custom roles | Post-MVP | System roles still suffice; not requested in the Phase 11 spec |
+| SaaS billing (prices, invoices, trials) | When a billing provider is chosen | D-088: plans are capabilities only; a billing integration writes `tenant_subscriptions` |
+| Reporting read models / materialised views | Only if measured need | D-090: on-demand SQL over indexed bookings |
 | Availability caching | Only if measured need | Correctness first; avoid premature optimisation |
 | External API keys for server-to-server integrations | Post-Phase 8 | Public API first |
 | Row-Level Security | Phase 12 evaluation | Defense in depth on top of tested tenant scoping |

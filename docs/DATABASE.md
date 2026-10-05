@@ -1,6 +1,6 @@
 # Database
 
-Status: **Phases 1–10 implemented (V001–V030).** SQL below is illustrative; the migrations are the source of truth once written, and this document is updated to match them.
+Status: **Phases 1–11 implemented (V001–V031).** SQL below is illustrative; the migrations are the source of truth once written, and this document is updated to match them.
 
 ## 1. Platform
 
@@ -17,7 +17,7 @@ Status: **Phases 1–10 implemented (V001–V030).** SQL below is illustrative; 
 - **Immutable once merged** to main. Corrections are new migrations.
 - Execution: `dotnet run --project Backend/BookingPlatform.Migrations --launch-profile migrate -- migrate` locally, or the `migrator` image (`docker run --rm -e ConnectionStrings__Postgres=... bookingplatform/migrator`). Exit codes: 0 success (including "nothing to apply"), 1 failure or missing connection string, 2 unknown command. The Api may auto-migrate only in Development when `Database__AutoMigrate=true`. Production runs the migrator as an explicit deployment step/job.
 - Script names are validated (`V###__lower_snake.sql`, unique version numbers) by a unit test, so a misnamed file fails CI rather than being silently skipped.
-- Implemented: **V001__extensions** (Phase 1); **V002–V005, V023, V027** (Phase 2); **V006–V013** (Phase 3); **V014–V020** (Phase 4); **V021, V022, V024–V026** (Phase 5); **V028** (Phase 8); **V029** (Phase 9); **V030** (Phase 10).
+- Implemented: **V001__extensions** (Phase 1); **V002–V005, V023, V027** (Phase 2); **V006–V013** (Phase 3); **V014–V020** (Phase 4); **V021, V022, V024–V026** (Phase 5); **V028** (Phase 8); **V029** (Phase 9); **V030** (Phase 10); **V031** (Phase 11).
 - Dev data: `--launch-profile seed-dev` (C# seeder, idempotent; runs migrations first; creates Demo Hospitality and Demo Coworking, the dev admin as platform admin + owner of both, and manager/host/staff/viewer users in Demo Hospitality; all passwords come from `DEV_ADMIN_PASSWORD`; refuses when `DOTNET_ENVIRONMENT=Production`). Phase 3 adds Demo Restaurant and Demo Club (Demo Hospitality) and Demo Workspace (Demo Coworking) with sections, resource types, resources, weekly hours and a floor plan each; a venue's contents are only seeded when the venue itself is created, so edits made in the app survive re-runs. Phase 4 adds a "Tables 4 + 5" combination to a newly created Demo Restaurant.
 - Out-of-order numbers: DbUp applies every script missing from the journal, sorted by name, so a database that already has V027 still receives V006–V022 later. Consequently a lower-numbered migration added later must not depend on data or objects from a higher-numbered one that was applied earlier, and vice versa.
 
@@ -83,6 +83,13 @@ Status: **Phases 1–10 implemented (V001–V030).** SQL below is illustrative; 
 - V030 `payment_webhook_events`: unique `(provider, provider_event_id)` (the dedupe key, D-083), `event_type`, `outcome` (`APPLIED`/`IGNORED`/`UNMATCHED`) with `detail`, optional `tenant_id` (FK CASCADE) and `payment_id`, `payload_sha256` (exactly 32 bytes; bodies are never stored), `received_at` (indexed for a future purge).
 - V030 permissions: `payment.view` (OWNER, ADMIN, MANAGER, HOST) and `payment.refund` (OWNER, ADMIN, MANAGER).
 - Deposit expiry uses the existing `ix_bookings_held_expiry (expires_at) WHERE status = 'HELD'` from V015.
+
+### Phase 11 schema notes
+
+- V031 `plans`: reference data keyed by `code` (`^[A-Z][A-Z0-9_]{1,39}$`), with `name`, `description`, nullable `max_venues` / `max_active_staff` / `max_resources_per_venue` (NULL = unlimited, otherwise ≥ 1), `custom_branding`, `is_default` (a unique partial index allows one default) and `sort_order`. Seeded: STARTER (1 venue, 5 staff, 30 resources per venue, no branding, default), PROFESSIONAL (5 / 25 / 100, branding), ENTERPRISE (unlimited, branding). There are no prices: plans are capabilities, not billing (D-088).
+- V031 `tenant_subscriptions`: PK `tenant_id` (FK CASCADE), `plan_code` (FK to `plans`), optional overrides for each limit (1–100 000), timestamps. Every tenant that existed when V031 ran was backfilled to PROFESSIONAL. A tenant without a row is treated as being on the default plan.
+- V031 `tenant_branding`: PK `tenant_id` (FK CASCADE). `primary_color` is checked against `^#[0-9a-f]{6}$`; `logo_url` must start with `https://` and be ≤ 500 chars; `booking_page_intro` ≤ 1000 and `booking_terms` ≤ 2000 chars. The application validates further (D-091).
+- Limit checks lock the tenant row with `FOR NO KEY UPDATE` and count with existing indexes (D-089). Reports aggregate `bookings` by `(tenant_id, venue_id, business_date)` on demand (D-090).
 
 ### Planned sequence and phase
 
