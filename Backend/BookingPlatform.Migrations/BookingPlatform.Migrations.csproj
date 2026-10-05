@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>BookingPlatform.Migrations</RootNamespace>
+    <UserSecretsId>$(BookingPlatformUserSecretsId)</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="dbup-postgresql" />
+    <!-- Pins the driver to the same version the Api and Worker use (dbup-postgresql alone resolves an older one). -->
+    <PackageReference Include="Npgsql" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="Serilog.Extensions.Hosting" />
+    <PackageReference Include="Serilog.Sinks.Console" />
+    <PackageReference Include="Serilog.Formatting.Compact" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Scripts live in /database/migrations; embedded with a stable logical name so ordering is by file name. -->
+    <EmbeddedResource Include="..\..\database\migrations\*.sql" LogicalName="Migrations.%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <!-- No appsettings files: this project is referenced by the Api, and its settings would overwrite the Api's in bin/. -->
+
+
+</Project>
