@@ -26,6 +26,48 @@ export function formatDate(iso) {
   }).format(new Date(Date.UTC(y, m - 1, d)))
 }
 
+/** The zone's UTC offset in milliseconds at an instant. */
+function zoneOffsetMs(ms, timeZone) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      hourCycle: 'h23',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    })
+      .formatToParts(new Date(ms))
+      .map((p) => [p.type, p.value]),
+  )
+  const asUtc = Date.UTC(
+    +parts.year,
+    +parts.month - 1,
+    +parts.day,
+    +parts.hour,
+    +parts.minute,
+    +parts.second,
+  )
+  return asUtc - Math.floor(ms / 1000) * 1000
+}
+
+/**
+ * The UTC instant (ms) of a wall-clock date and time in a zone. Times skipped by a DST gap move forward;
+ * ambiguous times resolve to the earlier instant.
+ */
+export function zonedTimeToUtc(dateIso, time, timeZone) {
+  const [y, m, d] = dateIso.split('-').map(Number)
+  const [hh, mm] = time.split(':').map(Number)
+  const wall = Date.UTC(y, m - 1, d, hh, mm)
+  const halfDay = 12 * 3600 * 1000
+  const before = wall - zoneOffsetMs(wall - halfDay, timeZone)
+  const after = wall - zoneOffsetMs(wall + halfDay, timeZone)
+  const valid = [before, after].filter((c) => c + zoneOffsetMs(c, timeZone) === wall)
+  return valid.length ? Math.min(...valid) : before
+}
+
 /** Formats an instant as HH:mm in the given time zone. */
 export function formatTime(instant, timeZone) {
   const options = { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }

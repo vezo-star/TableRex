@@ -7,6 +7,10 @@ export const RouteNames = Object.freeze({
   FORBIDDEN: 'forbidden',
   DASHBOARD: 'dashboard',
   AVAILABILITY: 'availability',
+  BOOKINGS: 'bookings',
+  CUSTOMERS: 'customers',
+  CUSTOMER_DETAILS: 'customer-details',
+  AUDIT_LOG: 'audit-log',
   ACCOUNT: 'account',
   STAFF: 'staff',
   VENUES: 'venues',
@@ -22,6 +26,18 @@ export const RouteNames = Object.freeze({
 /** Drawer entries; each is shown only when the user holds `permission` (or any of `anyPermission`). */
 export const dashboardNavigation = Object.freeze([
   { label: 'Dashboard', icon: 'dashboard', to: { name: RouteNames.DASHBOARD } },
+  {
+    label: 'Bookings',
+    icon: 'event_note',
+    to: { name: RouteNames.BOOKINGS },
+    permission: Permissions.BOOKING_VIEW,
+  },
+  {
+    label: 'Customers',
+    icon: 'people',
+    to: { name: RouteNames.CUSTOMERS },
+    permission: Permissions.CUSTOMER_VIEW,
+  },
   {
     label: 'Availability',
     icon: 'event_available',
@@ -56,6 +72,12 @@ export const dashboardNavigation = Object.freeze([
     label: 'Settings',
     icon: 'settings',
     to: { name: RouteNames.SETTINGS },
+    permission: Permissions.SETTINGS_MANAGE,
+  },
+  {
+    label: 'Audit log',
+    icon: 'history',
+    to: { name: RouteNames.AUDIT_LOG },
     permission: Permissions.SETTINGS_MANAGE,
   },
   { label: 'System status', icon: 'monitor_heart', to: { name: RouteNames.SYSTEM_STATUS } },

@@ -97,6 +97,8 @@ const props = defineProps({
   resources: { type: Object, default: () => ({}) },
   selectedId: { type: String, default: null },
   editable: { type: Boolean, default: false },
+  /** Optional fill per resource id (the booking board colours tables by status). */
+  fills: { type: Object, default: () => ({}) },
 })
 const emit = defineEmits(['select', 'update'])
 
@@ -119,6 +121,9 @@ function fillFor(p) {
   const resource = props.resources[p.resourceId]
   if (!resource || !resource.isActive) {
     return '#eeeeee'
+  }
+  if (props.fills[p.resourceId]) {
+    return props.fills[p.resourceId]
   }
   return p.resourceId === props.selectedId ? '#e3f2fd' : '#ffffff'
 }

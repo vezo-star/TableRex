@@ -19,6 +19,31 @@ const routes = [
         meta: { permission: Permissions.BOOKING_VIEW },
       },
       {
+        path: 'bookings',
+        name: RouteNames.BOOKINGS,
+        component: () => import('@/pages/bookings/BookingBoardPage.vue'),
+        meta: { permission: Permissions.BOOKING_VIEW },
+      },
+      {
+        path: 'customers',
+        name: RouteNames.CUSTOMERS,
+        component: () => import('@/pages/customers/CustomersPage.vue'),
+        meta: { permission: Permissions.CUSTOMER_VIEW },
+      },
+      {
+        path: 'customers/:customerId',
+        name: RouteNames.CUSTOMER_DETAILS,
+        component: () => import('@/pages/customers/CustomerDetailsPage.vue'),
+        meta: { permission: Permissions.CUSTOMER_VIEW },
+        props: true,
+      },
+      {
+        path: 'audit-log',
+        name: RouteNames.AUDIT_LOG,
+        component: () => import('@/pages/settings/AuditLogPage.vue'),
+        meta: { permission: Permissions.SETTINGS_MANAGE },
+      },
+      {
         path: 'staff',
         name: RouteNames.STAFF,
         component: () => import('@/pages/staff/StaffPage.vue'),

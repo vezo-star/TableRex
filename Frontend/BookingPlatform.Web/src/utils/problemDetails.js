@@ -28,14 +28,31 @@ const GENERIC_MESSAGE = 'The request could not be completed.'
  * `status` is 0 when no HTTP response was received.
  */
 export class ApiError extends Error {
-  constructor({ status, code, message, traceId = null, errors = {} }) {
+  constructor({ status, code, message, traceId = null, errors = {}, extensions = {} }) {
     super(message)
     this.name = 'ApiError'
     this.status = status
     this.code = code
     this.traceId = traceId
     this.errors = errors
+    this.extensions = extensions
   }
+}
+
+const STANDARD_MEMBERS = new Set([
+  'type',
+  'title',
+  'status',
+  'detail',
+  'instance',
+  'code',
+  'traceId',
+  'errors',
+])
+
+/** Extra ProblemDetails members (e.g. `customerId` on EMAIL_TAKEN). */
+function extensionMembers(body) {
+  return Object.fromEntries(Object.entries(body).filter(([key]) => !STANDARD_MEMBERS.has(key)))
 }
 
 function codeForStatus(status) {
@@ -91,5 +108,6 @@ export function normaliseError(error) {
     message,
     traceId: typeof body.traceId === 'string' ? body.traceId : null,
     errors: normaliseFieldErrors(body.errors),
+    extensions: extensionMembers(body),
   })
 }
