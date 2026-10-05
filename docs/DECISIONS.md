@@ -105,6 +105,14 @@ Changing an Accepted decision requires the stop-and-explain process in `AGENTS.m
 
 **D-041 — Selected venue is client state.** Accepted. The header venue switcher stores the selection per tenant in `localStorage` (`bp-venue:{tenantId}`); the server never trusts it — every venue-scoped request passes the venue id and is checked by `IVenueAccessGuard`.
 
+**D-042 — Availability slot grid.** Accepted. Candidate starts are aligned to each operating period's opening time and step by `slot_interval_minutes` in real (UTC) time, so a DST gap shortens the grid instead of producing duplicate or non-existent local times. The guest duration `[t, t + duration)` must fit the period; turnover is added only for the conflict check (it may run past closing). Staff searches omit slots that start before now; public searches (Phase 8) will use now + lead time.
+
+**D-043 — Combination members may be optional.** Accepted. `resource_combination_members.is_required` (default true). A combination is offered when every required member is free; optional members are included in the allocation only when they are free too. A combination whose required member is excluded by a section or type filter is not offered.
+
+**D-044 — Preferred time narrows, it does not rank.** Accepted. `GET /availability?time=HH:mm` returns slots within ±90 minutes of the preferred start, in time order; the client decides how to present "closest" alternatives. Options inside a slot are always ranked: single resources, then smallest sufficient capacity, then sort order, then name.
+
+**D-045 — Expired holds are ignored at read time.** Accepted. Availability treats `HOLD` allocations with `expires_at <= now` as free even if the sweeper has not yet deactivated them; the allocating transaction (Phase 5) deactivates them before inserting so the exclusion constraint never sees a stale hold as a conflict.
+
 ## Risk register
 
 | # | Risk | Impact | Mitigation |

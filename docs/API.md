@@ -150,8 +150,8 @@ Venue scoping (D-018): OWNER/ADMIN see every venue of the tenant; other roles on
 | POST | `/api/v1/resources` | resource.create |
 | GET / PUT | `/api/v1/resources/{id}` | resource.view / resource.update |
 | DELETE | `/api/v1/resources/{id}` | resource.delete (deactivates if it has booking history) |
-| GET / POST | `/api/v1/resource-combinations?venueId` | resource.view / resource.create (Phase 4) |
-| PUT / DELETE | `/api/v1/resource-combinations/{id}` | resource.update / resource.delete (Phase 4) |
+| GET / POST | `/api/v1/resource-combinations?venueId` | resource.view / resource.create (Phase 4 — implemented) |
+| GET / PUT / DELETE | `/api/v1/resource-combinations/{id}` | resource.view / resource.update / resource.delete (Phase 4 — implemented) |
 | GET | `/api/v1/floor-plans?venueId` | floorplan.view |
 | POST | `/api/v1/floor-plans` | floorplan.manage |
 | GET / PUT / DELETE | `/api/v1/floor-plans/{id}` | floorplan.view / floorplan.manage |
@@ -159,7 +159,9 @@ Venue scoping (D-018): OWNER/ADMIN see every venue of the tenant; other roles on
 
 Resource rules: `code` unique per venue (409 `CODE_TAKEN`; type codes unique per tenant, `^[A-Z][A-Z0-9_]{0,39}$`); `1 ≤ minCapacity ≤ capacity ≤ 1000`; `sectionId` must belong to the same venue; `attributes` is a string map (≤ 20 keys). DELETE returns `{ deleted, deactivated }`.
 
-### Availability, holds, blocks (Phase 4–5)
+Combination body: `{ venueId, name, minCapacity, capacity, members: [{ resourceId, isRequired }], isBookableOnline, sortOrder }` (PUT omits `venueId` and adds `isActive`). Rules: 2–20 distinct members, at least one required, every member a resource of the same venue (400 `members`); name unique per venue, case-insensitive (409 `CONFLICT`); `1 ≤ minCapacity ≤ capacity ≤ 1000`. Optional members are allocated only when free (D-043). DELETE deactivates instead when bookings reference the combination.
+
+### Availability, holds, blocks (Phase 4 implemented; holds/blocks Phase 5)
 
 | Method | Path | Permission |
 |---|---|---|
@@ -174,15 +176,22 @@ Availability response (staff):
 ```json
 {
   "venueId": "…", "date": "2026-10-09", "timeZone": "Africa/Johannesburg", "partySize": 4, "durationMinutes": 120,
+  "turnoverMinutes": 15, "isClosed": false,
   "slots": [
     { "time": "19:30", "startsAt": "2026-10-09T17:30:00Z", "endsAt": "2026-10-09T19:30:00Z", "available": true,
       "options": [
-        { "kind": "RESOURCE", "resourceIds": ["…"], "label": "Table 4", "capacity": 4, "sectionId": "…" },
-        { "kind": "COMBINATION", "combinationId": "…", "resourceIds": ["…","…"], "label": "Table 5 + 6", "capacity": 8 }
+        { "kind": "RESOURCE", "id": "…", "name": "Table 4", "capacity": 4, "resourceIds": ["…"] },
+        { "kind": "COMBINATION", "id": "…", "name": "Table 5 + 6", "capacity": 8, "resourceIds": ["…","…"] }
       ] }
   ]
 }
 ```
+
+- `date` is the venue-local business date (an overnight period belongs to the date it opens on); `time` is the venue-local start (`HH:mm`).
+- `durationMinutes` defaults to the venue default and must lie within the venue's min/max (400 `durationMinutes`); `partySize` 1–1000. Public limits (max party, lead time, advance days) do not apply to staff (DOMAIN_MODEL §5).
+- `time` (optional, `HH:mm`) narrows the result to slots within ±90 minutes (D-044). `sectionId` (must belong to the venue) and `resourceTypeId` filter the candidate resources; a combination is offered only if its required members pass the filters.
+- Closed dates and inactive venues return `isClosed: true` with no slots. Slots that start before now are omitted. Options are ranked: single resources, smallest sufficient capacity, sort order (D-042).
+- Inaccessible venues return 404 `VENUE_NOT_FOUND` (D-018).
 
 ### Bookings (Phase 5)
 

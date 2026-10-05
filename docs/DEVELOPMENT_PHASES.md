@@ -13,7 +13,7 @@ The next phase starts only after the explicit instruction **"PROCEED TO NEXT PHA
 | 1 | Foundation | **Complete** (2026-10-05) |
 | 2 | Authentication & Multi-tenancy | **Complete** (2026-10-05) |
 | 3 | Venues & Resources | **Complete** (2026-10-05) |
-| 4 | Availability Engine | Not started |
+| 4 | Availability Engine | **Complete** (2026-10-05) |
 | 5 | Core Booking Engine | Not started |
 | 6 | Internal Staff Experience | Not started |
 | 7 | Real-time | Not started |
@@ -87,6 +87,12 @@ Build: migrations V014–V020 (customers, bookings, booking_resources, booking_a
 
 Acceptance: availability correctly handles bookings, holds (active/expired), blocks, operating hours, overnight periods, special hours, capacity, sections, combinations — each covered by unit and integration tests; migration tests prove the exclusion constraint rejects overlaps and accepts inactive/adjacent rows.
 
+Completion notes (2026-10-05):
+- Verified: Release build with 0 warnings; 104 unit tests (15 new `AvailabilityCalculator` tests: slot grid, half-open adjacency, turnover, capacity range, required/optional combination members, filtered-out members, ranking, overnight business date, previous-period overnight claim, special closed/custom days, earliest start, Europe/London DST gap, invalid queries); 65 integration tests (4 new database tests: overlapping/contained ranges rejected with 23P01, adjacent/inactive/other-resource rows accepted, reactivating an overlapping row rejected, owner-type check, empty range, cross-tenant composite FK, hold token length, two concurrent transactions → second waits then fails with 23P01; 5 API tests: bookings + active holds + blocks occupy, expired holds and cancelled bookings do not, turnover + preferred-time window, combinations CRUD + duplicate name + cross-venue member + availability for large parties + deactivate + delete + audit, section/type filters, closed day/inactive venue/validation/cross-tenant/unassigned Host; 1 seeder test: demo data seeded once and re-run is a no-op); 120 Vitest tests; ESLint + Prettier clean.
+- Migrations V014–V020 applied to the Compose database and from empty in the migration test.
+- Browser smoke test (throwaway admin): availability for Demo Restaurant shows the Monday closure, Tuesday lunch 12:00–13:00 and dinner 18:00–21:00 slots with smallest tables ranked first; a combination "Tables 6 + 7" created through the Resources page; with a temporary maintenance block on Table 6 (19:00–21:00) a party of 10 is offered the combination only at lunch and 21:00 (the block was cancelled afterwards).
+- Decisions: D-042 slot grid, D-043 optional combination members, D-044 preferred-time window, D-045 expired holds ignored at read time.
+
 ## Phase 5 — Core Booking Engine
 
 Build: migrations V021, V022, V024, V025, V026; `BookingService` (create, update, move, cancel, confirm, check-in, seat, complete, no-show), holds (create/release/convert), blocks (create/cancel), idempotency, unit of work, status machine enforcement, history/events/audit/outbox writes, 23P01 → 409 mapping, auto-assignment with savepoints, optimistic concurrency, booking reference sequence; expired-hold sweeper in Worker.
@@ -146,7 +152,7 @@ Full review against the checklist in the master specification §67 Phase 12 and 
 | ~~`http.js` auth header and single-flight refresh interceptors~~ | Done in Phase 2 | |
 | ~~`Migrations seed-dev` command~~ | Done in Phase 2 | |
 | ~~`IVenueAccessGuard` and `/me.accessibleVenueIds`~~ | Done in Phase 3 | |
-| Resource combinations CRUD | Phase 4 | Belongs with availability |
+| ~~Resource combinations CRUD~~ | Done in Phase 4 | |
 | Password reset / email verification | Phase 9 | Needs notifications |
 | SignalR JS client (`realtimeService`) | Phase 7 | Realtime phase |
 | CI `package` stage (build and push images) | Phase 12 | Needs a registry and hosting decision; images are build-verified locally |

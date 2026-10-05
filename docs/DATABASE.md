@@ -1,6 +1,6 @@
 # Database
 
-Status: **Phases 1–2 implemented (V001–V005, V023, V027); later tables are the proposed design.** SQL below is illustrative; the migrations are the source of truth once written, and this document is updated to match them.
+Status: **Phases 1–4 implemented (V001–V020, V023, V027); later tables are the proposed design.** SQL below is illustrative; the migrations are the source of truth once written, and this document is updated to match them.
 
 ## 1. Platform
 
@@ -17,8 +17,8 @@ Status: **Phases 1–2 implemented (V001–V005, V023, V027); later tables are t
 - **Immutable once merged** to main. Corrections are new migrations.
 - Execution: `dotnet run --project Backend/BookingPlatform.Migrations --launch-profile migrate -- migrate` locally, or the `migrator` image (`docker run --rm -e ConnectionStrings__Postgres=... bookingplatform/migrator`). Exit codes: 0 success (including "nothing to apply"), 1 failure or missing connection string, 2 unknown command. The Api may auto-migrate only in Development when `Database__AutoMigrate=true`. Production runs the migrator as an explicit deployment step/job.
 - Script names are validated (`V###__lower_snake.sql`, unique version numbers) by a unit test, so a misnamed file fails CI rather than being silently skipped.
-- Implemented: **V001__extensions** (Phase 1); **V002–V005, V023, V027** (Phase 2); **V006–V013** (Phase 3).
-- Dev data: `--launch-profile seed-dev` (C# seeder, idempotent; runs migrations first; creates Demo Hospitality and Demo Coworking, the dev admin as platform admin + owner of both, and manager/host/staff/viewer users in Demo Hospitality; all passwords come from `DEV_ADMIN_PASSWORD`; refuses when `DOTNET_ENVIRONMENT=Production`). Phase 3 adds Demo Restaurant and Demo Club (Demo Hospitality) and Demo Workspace (Demo Coworking) with sections, resource types, resources, weekly hours and a floor plan each; a venue's contents are only seeded when the venue itself is created, so edits made in the app survive re-runs.
+- Implemented: **V001__extensions** (Phase 1); **V002–V005, V023, V027** (Phase 2); **V006–V013** (Phase 3); **V014–V020** (Phase 4).
+- Dev data: `--launch-profile seed-dev` (C# seeder, idempotent; runs migrations first; creates Demo Hospitality and Demo Coworking, the dev admin as platform admin + owner of both, and manager/host/staff/viewer users in Demo Hospitality; all passwords come from `DEV_ADMIN_PASSWORD`; refuses when `DOTNET_ENVIRONMENT=Production`). Phase 3 adds Demo Restaurant and Demo Club (Demo Hospitality) and Demo Workspace (Demo Coworking) with sections, resource types, resources, weekly hours and a floor plan each; a venue's contents are only seeded when the venue itself is created, so edits made in the app survive re-runs. Phase 4 adds a "Tables 4 + 5" combination to a newly created Demo Restaurant.
 - Out-of-order numbers: DbUp applies every script missing from the journal, sorted by name, so a database that already has V027 still receives V006–V022 later. Consequently a lower-numbered migration added later must not depend on data or objects from a higher-numbered one that was applied earlier, and vice versa.
 
 ### Phase 2 schema notes
@@ -38,6 +38,17 @@ Status: **Phases 1–2 implemented (V001–V005, V023, V027); later tables are t
 - `bookable_resources`: unique `(venue_id, code)`; `0 < min_capacity ≤ capacity ≤ 1000`; `attributes jsonb` must be an object. Section/type/venue FKs are `ON DELETE RESTRICT` (delete-or-deactivate, D-038).
 - `floor_plan_resources`: PK `(floor_plan_id, resource_id)`; numeric(8,2) geometry, rotation `[0, 360)`, shape RECT/ROUND; cascades when the plan or resource is deleted.
 - `operating_hours`: ISO `day_of_week` 1–7, `open_time <> close_time` (close ≤ open = overnight). `special_operating_hours`: one row per period; `is_closed` ⇔ both times null.
+
+### Phase 4 schema notes
+
+- `customers`: tenant-wide; `email citext`, `phone_normalized` (`^\+?[0-9]{4,20}$`), `preferences jsonb` object, `anonymized_at` for erasure; trigram GIN index on first + last name.
+- `bookings`: `reference` unique and `^BK-[0-9]{8}-[0-9]{6,}$` from `booking_reference_seq`; status and source CHECKs; `HELD ⇒ expires_at`; `CANCELLED ⇔ cancelled_at`; `public_token_hash` 32 bytes, unique; `version` for optimistic concurrency; exposes `(tenant_id, venue_id, id)`.
+- `booking_resources`: PK `(booking_id, resource_id)`; composite FKs to the booking and resource of the **same venue**; `combination_id` FK added in V019.
+- `booking_allocations`: exactly as §4.1 — generated `period tstzrange '[)'`, owner CHECK (one of booking/hold/block matching `allocation_type`; HOLD needs `expires_at`), `is_active ⇔ released_at IS NULL`, `release_reason` enum, and `ex_booking_allocations_no_overlap EXCLUDE USING gist (resource_id WITH =, period WITH &&) WHERE (is_active)`. GiST `(venue_id, period) WHERE is_active` serves availability reads. The hold and block FKs are added by V018/V020.
+- `resource_holds`: `token_hash` 32 bytes, unique; owner USER/PUBLIC; status ACTIVE/CONVERTED/RELEASED/EXPIRED with `CONVERTED ⇔ converted_booking_id`.
+- `resource_combinations` + `resource_combination_members(is_required)`: unique `(venue_id, name)`; members reference resources of the same venue; members cascade with the combination; combinations referenced by bookings are deactivated, not deleted.
+- `resource_blocks`: reason enum (MAINTENANCE, PRIVATE_EVENT, CLEANING, MANAGEMENT, UNAVAILABLE, STAFF_USE); `CANCELLED ⇔ cancelled_at`.
+- Verified by `AllocationConstraintTests`: overlapping and contained ranges → 23P01; adjacent, inactive and other-resource rows accepted; reactivating an overlapping row → 23P01; a second concurrent transaction waits for the first and then fails with 23P01.
 
 ### Planned sequence and phase
 
