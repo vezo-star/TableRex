@@ -50,6 +50,7 @@ builder.Services
     });
 builder.Services.AddPlatformSwagger();
 
+builder.Services.AddHsts(options => options.MaxAge = TimeSpan.FromDays(365));
 builder.Services.AddPlatformForwardedHeaders(builder.Configuration);
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddTokenIssuing(builder.Configuration);

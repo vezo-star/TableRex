@@ -81,7 +81,10 @@ public static class AuthenticationSetup
                 };
             });
 
-        services.AddAuthorization();
+        // Secure by default: an endpoint (or unmatched path) without authorization metadata needs a signed-in user.
+        // Anonymous endpoints opt out with [AllowAnonymous]; tenant data additionally needs a permission attribute.
+        services.AddAuthorization(options =>
+            options.FallbackPolicy = new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build());
         services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
         services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
         services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationMiddlewareResultHandler, ProblemDetailsAuthorizationResultHandler>();

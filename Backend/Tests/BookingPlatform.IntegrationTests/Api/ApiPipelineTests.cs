@@ -2,6 +2,10 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using BookingPlatform.IntegrationTests.Infrastructure;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace BookingPlatform.IntegrationTests.Api;
 
@@ -102,7 +106,7 @@ public sealed class ApiPipelineTests(UnreachableDependenciesApiFixture fixture) 
     [InlineData("/__tests/errors/not-found", HttpStatusCode.NotFound, "VENUE_NOT_FOUND")]
     [InlineData("/__tests/errors/conflict", HttpStatusCode.Conflict, "RESOURCE_NOT_AVAILABLE")]
     [InlineData("/__tests/errors/forbidden", HttpStatusCode.Forbidden, "FORBIDDEN")]
-    [InlineData("/api/v1/does-not-exist", HttpStatusCode.NotFound, "NOT_FOUND")]
+    [InlineData("/api/v1/does-not-exist", HttpStatusCode.Unauthorized, "UNAUTHORIZED")]
     public async Task Expected_errors_map_to_status_and_stable_code(string path, HttpStatusCode status, string code)
     {
         var response = await _client.GetAsync(path, Ct);
@@ -146,6 +150,44 @@ public sealed class ApiPipelineTests(UnreachableDependenciesApiFixture fixture) 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         using var body = await ReadJsonAsync(response);
         body.RootElement.GetProperty("info").GetProperty("title").GetString().Should().Be("Booking Platform API");
+    }
+
+    [Fact]
+    public void Every_endpoint_declares_its_access_and_only_known_endpoints_are_anonymous()
+    {
+        var endpoints = fixture.Factory.Services.GetRequiredService<EndpointDataSource>().Endpoints
+            .OfType<RouteEndpoint>()
+            .Where(e => !(e.RoutePattern.RawText ?? string.Empty).StartsWith("__tests", StringComparison.Ordinal))
+            .Select(e => new
+            {
+                Route = $"{string.Join('|', e.Metadata.GetMetadata<IHttpMethodMetadata>()?.HttpMethods ?? ["*"])} /{(e.RoutePattern.RawText ?? string.Empty).TrimStart('/')}",
+                Anonymous = e.Metadata.GetMetadata<IAllowAnonymous>() is not null,
+                Authorized = e.Metadata.GetOrderedMetadata<IAuthorizeData>().Count > 0,
+            })
+            .ToList();
+
+        endpoints.Should().HaveCountGreaterThan(80);
+        endpoints.Where(e => !e.Anonymous && !e.Authorized).Select(e => e.Route).Should().BeEmpty(
+            "every endpoint must state who may call it ([Authorize], [RequireTenant], [HasPermission], [RequirePlatformAdmin] or [AllowAnonymous])");
+        endpoints.Where(e => e.Anonymous).Select(e => e.Route).Should().BeEquivalentTo(
+        [
+            "* /health",
+            "* /health/ready",
+            "POST /api/v1/auth/login",
+            "POST /api/v1/auth/refresh",
+            "POST /api/v1/auth/logout",
+            "POST /api/v1/auth/password/forgot",
+            "POST /api/v1/auth/password/reset",
+            "GET /api/v1/public/{tenantSlug}",
+            "GET /api/v1/public/{tenantSlug}/{venueSlug}",
+            "GET /api/v1/public/{tenantSlug}/{venueSlug}/availability",
+            "POST /api/v1/public/{tenantSlug}/{venueSlug}/bookings",
+            "GET /api/v1/public/booking",
+            "POST /api/v1/public/booking/cancel",
+            "POST /api/v1/public/booking/payment",
+            "POST /api/v1/payments/webhooks/{provider}",
+            "POST /api/v1/payments/simulated/complete",
+        ]);
     }
 
     private static async Task<JsonDocument> ReadJsonAsync(HttpResponseMessage response) =>

@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using BookingPlatform.Application.Common.Errors;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BookingPlatform.IntegrationTests.Infrastructure;
@@ -8,6 +9,7 @@ namespace BookingPlatform.IntegrationTests.Infrastructure;
 /// Exists only in the test assembly to exercise the API's error pipeline. Never part of the Api.
 /// </summary>
 [ApiController]
+[AllowAnonymous]
 [Route("__tests/errors")]
 public sealed class TestErrorsController : ControllerBase
 {
