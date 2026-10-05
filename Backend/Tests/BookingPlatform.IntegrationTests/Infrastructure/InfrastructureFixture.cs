@@ -16,7 +16,8 @@ public sealed class InfrastructureFixture : IAsyncLifetime
     public const string RedisImage = "redis:8-alpine";
     private const string TemplateDatabase = "booking_template";
 
-    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder(PostgresImage).Build();
+    // Concurrency tests run 100 simultaneous transactions; the database, not the connection limit, must be the contention point.
+    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder(PostgresImage).WithCommand("-c", "max_connections=400").Build();
     private readonly RedisContainer _redis = new RedisBuilder(RedisImage).Build();
 
     public string RedisConnectionString => _redis.GetConnectionString();
@@ -56,7 +57,7 @@ public sealed class InfrastructureFixture : IAsyncLifetime
     }
 
     private string ConnectionStringFor(string database, bool pooling = true) =>
-        new NpgsqlConnectionStringBuilder(_postgres.GetConnectionString()) { Database = database, Pooling = pooling }.ConnectionString;
+        new NpgsqlConnectionStringBuilder(_postgres.GetConnectionString()) { Database = database, Pooling = pooling, MaxPoolSize = 150 }.ConnectionString;
 
     private static string NewDatabaseName() => "test_" + Guid.NewGuid().ToString("N");
 

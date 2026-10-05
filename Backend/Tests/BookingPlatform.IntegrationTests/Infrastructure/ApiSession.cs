@@ -72,7 +72,7 @@ public sealed class ApiSession(HttpClient client)
         return response;
     }
 
-    public async Task<HttpResponseMessage> SendAsync(HttpMethod method, string path, object? body = null)
+    public async Task<HttpResponseMessage> SendAsync(HttpMethod method, string path, object? body = null, IReadOnlyDictionary<string, string>? headers = null)
     {
         using var request = new HttpRequestMessage(method, path);
         if (body is not null)
@@ -80,9 +80,18 @@ public sealed class ApiSession(HttpClient client)
             request.Content = JsonContent.Create(body);
         }
 
+        foreach (var (name, value) in headers ?? new Dictionary<string, string>())
+        {
+            request.Headers.TryAddWithoutValidation(name, value);
+        }
+
         Authorize(request);
         return await Client.SendAsync(request, Ct);
     }
+
+    /// <summary>POST with a fresh (or given) Idempotency-Key header.</summary>
+    public Task<HttpResponseMessage> PostIdempotentAsync(string path, object body, string? key = null) =>
+        SendAsync(HttpMethod.Post, path, body, new Dictionary<string, string> { ["Idempotency-Key"] = key ?? Guid.NewGuid().ToString() });
 
     public Task<HttpResponseMessage> GetAsync(string path) => SendAsync(HttpMethod.Get, path);
 
