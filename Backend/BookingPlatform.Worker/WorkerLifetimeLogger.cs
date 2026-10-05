@@ -1,7 +1,7 @@
 namespace BookingPlatform.Worker;
 
 /// <summary>
-/// Records host start and graceful shutdown. Background jobs (outbox, hold expiry, cleanup) are added in later phases.
+/// Records host start and graceful shutdown.
 /// </summary>
 public sealed class WorkerLifetimeLogger(ILogger<WorkerLifetimeLogger> logger, IHostEnvironment environment) : IHostedService
 {
