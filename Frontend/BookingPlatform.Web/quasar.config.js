@@ -6,7 +6,7 @@ const API_DEV_TARGET = 'http://localhost:5080'
 
 export default defineConfig(() => {
   return {
-    boot: ['axios'],
+    boot: ['axios', 'auth'],
 
     css: ['app.css'],
 
@@ -39,7 +39,7 @@ export default defineConfig(() => {
 
     framework: {
       config: {},
-      plugins: [],
+      plugins: ['Notify', 'Dialog'],
     },
 
     animations: [],

@@ -2,18 +2,42 @@ import { describe, expect, it } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import routes from '@/router/routes.js'
 import { RouteNames } from '@/constants/navigation.js'
+import { Permissions } from '@/constants/permissions.js'
 
 const createAppRouter = () => createRouter({ history: createMemoryHistory(), routes })
 
 describe('routes', () => {
-  it('resolves / to the system status page inside the dashboard layout', async () => {
+  it('resolves / to the dashboard inside the dashboard layout and requires a tenant', async () => {
     const router = createAppRouter()
 
     await router.push('/')
 
     const route = router.currentRoute.value
-    expect(route.name).toBe(RouteNames.SYSTEM_STATUS)
+    expect(route.name).toBe(RouteNames.DASHBOARD)
     expect(route.matched).toHaveLength(2)
+    expect(route.meta.requiresTenant).toBe(true)
+  })
+
+  it.each([
+    ['/login', RouteNames.LOGIN, 'guestOnly'],
+    ['/select-tenant', RouteNames.SELECT_TENANT, 'requiresAuth'],
+    ['/system-status', RouteNames.SYSTEM_STATUS, 'public'],
+    ['/account', RouteNames.ACCOUNT, 'requiresAuth'],
+    ['/platform/tenants', RouteNames.PLATFORM_TENANTS, 'platformAdmin'],
+  ])('resolves %s with the expected access meta', async (path, name, metaKey) => {
+    const router = createAppRouter()
+
+    await router.push(path)
+
+    expect(router.currentRoute.value.name).toBe(name)
+    expect(router.currentRoute.value.meta[metaKey]).toBe(true)
+  })
+
+  it('protects staff and settings pages with permissions', async () => {
+    const router = createAppRouter()
+
+    expect(router.resolve('/staff').meta.permission).toBe(Permissions.STAFF_VIEW)
+    expect(router.resolve('/settings').meta.permission).toBe(Permissions.SETTINGS_MANAGE)
   })
 
   it.each(['/does-not-exist', '/deeply/nested/unknown'])(
