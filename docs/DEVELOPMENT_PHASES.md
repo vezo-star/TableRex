@@ -21,7 +21,7 @@ The next phase starts only after the explicit instruction **"PROCEED TO NEXT PHA
 | 9 | Outbox & Notifications | **Complete** (2026-10-05) |
 | 10 | Payments (abstractions) | **Complete** (2026-10-05) |
 | 11 | SaaS Features | **Complete** (2026-10-05) |
-| 12 | Production Hardening | Not started |
+| 12 | Production Hardening | **Complete** (2026-10-05) |
 
 Every phase's Definition of Done: compiles, all tests pass, migrations apply from empty DB, functionality verified (manual smoke test where applicable), security checks for the phase, tenant isolation tested where relevant, docs updated, no critical TODOs, phase completion report delivered.
 
@@ -219,6 +219,63 @@ Completion notes (2026-10-05):
 
 Full review against the checklist in the master specification §67 Phase 12 and the 20 final architectural questions (§100); load/concurrency testing; RLS evaluation (D-024); backups/PITR; runbooks; `DEPLOYMENT.md` finalised.
 
+Completion notes (2026-10-05):
+- Production-like stack:
+  - `deploy/compose.yml` runs every component in containers (`Production` environment, read-only filesystems, non-root users) behind one nginx origin.
+  - It can run locally built or CI-built images.
+  - Everything below was verified against it.
+- Security fixes (SECURITY.md §13):
+  - Authorization is deny-by-default, with a test auditing every endpoint (D-092).
+  - A supported `bootstrap-admin` command creates the first platform admin (D-093).
+  - The edge proxy logged JWTs from SignalR query strings; it no longer does (D-094).
+  - The Api and Worker ran as a database superuser; they now use a least-privilege role provisioned by the migrator (D-095).
+  - HSTS max-age is now one year.
+  - App role passwords that would break connection strings are rejected.
+- Resilience fixes:
+  - A Redis outage no longer takes instances out of rotation (D-097).
+  - A database outage now returns 503 with `Retry-After` instead of 500.
+  - After a container was recreated, the proxy kept its old address; upstreams now re-resolve, and the release steps reload the proxy.
+  - With 100 concurrent bookings, PostgreSQL ran out of connection slots; connection pools are now capped per process (D-099).
+- Accessibility and responsive design:
+  - An axe-core scan (WCAG 2.0/2.1 A and AA) covered every staff, public and platform page at 1366 px and 360 px, plus the populated board, booking drawer and create dialog.
+  - The first run found 12 issue types; all were fixed, and the rerun has 0 violations on 43 views with no horizontal overflow at 360 px (D-100).
+- Verification:
+  - Backend: 337 tests pass on a Release build with 0 warnings.
+  - Frontend: 247 Vitest tests pass; ESLint, Prettier and the build are clean.
+  - Playwright: 6 of 6 journeys pass on the stack (D-098).
+  - Load test: ~550–600 req/s on reads; 100 racers for one table give exactly 1 winner; 0 overlaps and no 5xx.
+  - Restore drill: identical row counts.
+  - `npm audit` and `dotnet list package --vulnerable` report no known vulnerabilities.
+  - Live security probes passed (SECURITY.md §13).
+- Decisions D-092 – D-100. RLS was evaluated and not enabled (D-096, closes D-024). New: RUNBOOKS.md and DEPLOYMENT.md §2–4.
+
+### Final architectural test (master specification §100)
+
+| # | Question | Answer | Evidence |
+|---|---|---|---|
+| 1 | Can two tenants access each other's data? | No | Tenant-scoped SQL, composite tenant foreign keys, `TenancyAndPermissionTests`; live probe: another tenant's venue, board and booking create all 404. RLS evaluated as an extra layer (D-096). |
+| 2 | Can two users double-book the same resource? | No | `EXCLUDE USING gist (resource_id WITH =, period WITH &&) WHERE (is_active)` on `booking_allocations` plus transaction-scoped advisory locks; `ConcurrencyTests`, `AllocationConstraintTests`; load test: 100 racers → 1 × 201, 99 × 409. |
+| 3 | Can a retry create a duplicate booking? | No | Required `Idempotency-Key` on creates (staff and public), replay returns the original; `BookingTests`, `PublicBookingTests`; Playwright double tap creates one booking. |
+| 4 | Can Redis corruption destroy booking correctness? | No | Redis holds only rate-limit counters and the SignalR backplane; bookings, holds and memberships live in PostgreSQL (membership cache is in-process). Redis outage drill: bookings unaffected (D-097). |
+| 5 | Can a SignalR outage prevent bookings? | No | Bookings are REST + PostgreSQL; realtime hints are dispatched from the outbox after commit; the SPA falls back to polling every minute. |
+| 6 | Can a booking be partially committed? | No | Booking, allocations, status history, audit and outbox rows are written in one transaction; `BookingInvariants` checked after every concurrency scenario. |
+| 7 | Can a cancelled booking occupy a resource? | No | Cancel deactivates its allocations in the same transaction; the exclusion constraint applies only to active allocations; `BookingTests`, `AllocationConstraintTests`. |
+| 8 | Can overnight hours work? | Yes | Opening hours past midnight belong to the starting business day; `OperatingScheduleTests`, `AvailabilityCalculatorTests`, `VenueAndResourceTests`. |
+| 9 | Can a booking use multiple resources? | Yes | Resource combinations allocate several resources in one booking (one allocation row each); availability and the create dialog offer combination options; `BookingTests`, `AvailabilityTests`. |
+| 10 | Can resources be blocked? | Yes | Resource blocks occupy allocations under the same constraint; `StaffExperienceTests`, board block dialog. |
+| 11 | Can a booking be moved safely? | Yes | Move is atomic with optimistic versioning; on conflict the original allocation is kept; move-vs-create race in `ConcurrencyTests`. |
+| 12 | Can the system recover from a SignalR reconnect? | Yes | The realtime store resyncs (refetches) on reconnect (Vitest); `RealtimeTests`; indicator shows paused/reconnecting states. |
+| 13 | Can the database be rebuilt from migrations? | Yes | `MigrationTests` apply V001–V031 to an empty database on every run; restore drill matched row counts. |
+| 14 | Can the application run without hard-coded secrets? | Yes | All secrets come from the environment or a secret store; startup fails on missing, short or placeholder keys; a secret scan runs before every commit. |
+| 15 | Can the public API access staff-only information? | No | Public endpoints return dedicated public DTOs; guest manage links are signed tokens scoped to one booking; the endpoint audit pins the anonymous set (D-092); `PublicBookingTests`. |
+| 16 | Can unauthorized users access another venue? | No | Venue-scope guard: venues outside a manager's scope return 404; `TenancyAndPermissionTests`, `SaasTests` (reports). |
+| 17 | Can the system survive 100 simultaneous booking attempts? | Yes | Load test on the stack: 100 racers for one table and 100 auto-allocated bookings for three tables, correct winners, 0 overlaps, no 5xx after the pool fix (D-099). |
+| 18 | Can a failed notification roll back a booking? | No | Notifications are outbox messages handled by the Worker after commit, with retries and dead-lettering; `NotificationTests`, `OutboxDispatcherTests`. |
+| 19 | Can an external website integrate with the booking API? | Yes | The anonymous public booking API (venue, availability, bookings, manage/cancel) is documented in API.md and callable from browsers on origins added to `Cors:AllowedOrigins`, or a site links to the hosted page `/book/{tenant}/{venue}`. Server-to-server API keys are deferred. |
+| 20 | Can another type of business use the system without changing the core booking engine? | Yes | The engine books generic resources with types, capacities, durations and combinations; resource types are tenant data (e2e setup creates its own type). Business-specific rules extend validation, not the engine. |
+
+All answers are safe; no blocking issue remains. Open items for go-live are listed in DEPLOYMENT.md §2 (hosting, SMTP, payment provider) and the deferred log below.
+
 ---
 
 ## Deferred items log
@@ -235,7 +292,7 @@ Full review against the checklist in the master specification §67 Phase 12 and 
 | Reporting read models / materialised views | Only if measured need | D-090: on-demand SQL over indexed bookings |
 | Availability caching | Only if measured need | Correctness first; avoid premature optimisation |
 | External API keys for server-to-server integrations | Post-Phase 8 | Public API first |
-| Row-Level Security | Phase 12 evaluation | Defense in depth on top of tested tenant scoping |
+| Row-Level Security | Revisit triggers in D-096 | Evaluated in Phase 12, not enabled; the enable path and its prerequisite (non-superuser app role, D-095) are in place |
 | ~~`http.js` auth header and single-flight refresh interceptors~~ | Done in Phase 2 | |
 | ~~`Migrations seed-dev` command~~ | Done in Phase 2 | |
 | ~~`IVenueAccessGuard` and `/me.accessibleVenueIds`~~ | Done in Phase 3 | |
@@ -245,4 +302,9 @@ Full review against the checklist in the master specification §67 Phase 12 and 
 | Booking reminders (scheduled emails) | Post-MVP | D-079: architecture documented; needs a scheduler table |
 | SMS notifications | Post-MVP | Needs a provider decision; `IEmailProvider` pattern applies |
 | ~~SignalR JS client (`realtimeService`)~~ | Done in Phase 7 | |
-| CI `package` stage (build and push images) | Phase 12 | Needs a registry and hosting decision; images are build-verified locally |
+| ~~CI `package` stage (build and push images)~~ | Done in Phase 12 | Pushes to the GitLab registry; hosting provider still open (D-098) |
+| Hosting provider and production deploy job | When hosting is chosen | D-098: `deploy/compose.yml` is the reference; DEPLOYMENT.md §2 lists what any host must provide |
+| OpenTelemetry metrics and tracing | When a collector is chosen | D-098: JSON logs with correlation ids, health/readiness and runbook queries are the baseline |
+| Real payment provider adapter | When a provider is chosen | D-087: only the simulated provider exists; deposit venues refuse online bookings in Production without one |
+| Manual screen-reader / keyboard accessibility walkthrough | Before public launch | D-100: automated WCAG 2.1 AA scan is clean; axe can be added to Playwright if the dependency is accepted |
+| Dropping the redundant index `ix_bookings_venue_business_date` | Next schema change | Covered by a wider index; kept to avoid a migration that only removes it |

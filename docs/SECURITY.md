@@ -1,6 +1,6 @@
 # Security
 
-Status: **Authentication, tenant context and authorization implemented (Phase 2).** Security is a first-class feature; each phase's acceptance criteria include its security checks. §12 records the concrete Phase 2 parameters and known limitations.
+Status: **Final (Phase 12 review complete).** Security is a first-class feature; each phase's acceptance criteria include its security checks. §12 records the concrete Phase 2 parameters and known limitations; §13 records the Phase 12 production-readiness review, the scans and live probes, and what was fixed.
 
 ## 1. Authentication
 
@@ -27,12 +27,13 @@ Status: **Authentication, tenant context and authorization implemented (Phase 2)
 7. **SignalR**: group names built from the verified `tid`; join requires membership + venue access (`REALTIME.md`).
 8. **Public API**: tenant and venue resolved from slugs server-side; only public-safe DTOs.
 9. **Platform admins**: manage tenants only; no implicit access to tenant bookings/customers. Any future support-access feature must be explicit, time-boxed and audited.
-10. **Defense in depth (Phase 12 evaluation)**: PostgreSQL Row-Level Security keyed on `SET LOCAL app.tenant_id` per transaction (D-024).
+10. **Defense in depth**: the Api and Worker connect as a least-privilege role (no superuser, no `BYPASSRLS`, no DDL; D-095). PostgreSQL Row-Level Security was evaluated in Phase 12 and is not enabled; D-096 records the reasons and the enable path.
 
 Mandatory tests: see `TESTING.md` §4.
 
 ## 3. Authorization
 
+- **Deny by default (D-092).** A fallback policy requires an authenticated user wherever no rule is declared, so a forgotten attribute closes an endpoint instead of opening it. An integration test enumerates all endpoints and fails if one declares no access rule or if the anonymous set changes.
 - Permission-based. Controllers use `[HasPermission(Permissions.BookingCreate)]`; a custom `IAuthorizationPolicyProvider` builds policies on demand, and `PermissionAuthorizationHandler` checks the caller's permission set for the current tenant.
 - Venue access: application services call `IVenueAccessGuard.EnsureAccessAsync(venueId)`, which checks the venue belongs to the current tenant **and** the caller may access it (D-018): TENANT_OWNER/TENANT_ADMIN access every venue; other roles only venues in `tenant_user_venues`. Inaccessible venues return 404. Venue lists return only accessible venues. Venue ids in requests are always re-checked.
 - Role/permission data is seeded reference data (V027); tenant custom roles are deferred.
@@ -75,7 +76,8 @@ OWNER vs ADMIN difference: ownership transfer and tenant deletion/suspension req
 
 ## 5. Transport, headers, CORS
 
-- HTTPS only outside development; HSTS.
+- HTTPS only outside development; HSTS `max-age=31536000` (one year) on requests that arrived over https via a trusted proxy.
+- Edge proxy rules (D-094): one origin for SPA and Api; `X-Forwarded-For` overwritten at the edge; **no query strings in any proxy or load-balancer log**, because SignalR sends the access token as `?access_token=` (the reference `deploy/proxy.conf` also limits the hub location's error log, since nginx error lines quote the request line).
 - Headers: `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY` for the API and staff app, a strict `Content-Security-Policy` for the SPA (served by nginx). The public booking pages are served by the same SPA under the same headers, so they cannot be framed; venues link or button to `/book/{tenantSlug}/{venueSlug}` instead of embedding an iframe (D-072). A per-tenant `frame-ancestors` allow-list can be added later without API changes.
 - CORS: explicit origins per environment from configuration, credentials allowed only for those origins. No wildcard with credentials.
 
@@ -149,7 +151,7 @@ OWNER vs ADMIN difference: ownership transfer and tenant deletion/suspension req
 
 - No secrets in source control. `.env.example` / `appsettings*.json` contain placeholders only.
 - Development: `dotnet user-secrets` or `.env` (git-ignored). Production: platform secret store injected as env vars.
-- Secrets: `Jwt__SigningKey`, `PublicBooking__TokenKey`, `ConnectionStrings__Postgres`, `ConnectionStrings__Redis`, `DEV_ADMIN_PASSWORD` (dev only), `Notifications__Email__SmtpPassword` (when the relay needs auth), `Payments__Simulated__WebhookSecret` (optional, non-Production only; random per process when unset), and the keys of a real payment provider once one is added.
+- Secrets: `Jwt__SigningKey`, `PublicBooking__TokenKey`, `ConnectionStrings__Postgres`, `ConnectionStrings__Redis`, `APP_DB_PASSWORD` (app role, provisioned by the migrator as a SCRAM verifier, so the plain text never reaches PostgreSQL), `PLATFORM_ADMIN_PASSWORD` (first run only, remove afterwards), `DEV_ADMIN_PASSWORD` (dev only), `Notifications__Email__SmtpPassword` (when the relay needs auth), `Payments__Simulated__WebhookSecret` (optional, non-Production only; random per process when unset), and the keys of a real payment provider once one is added.
 - Startup fails fast if required secrets are missing or too weak (signing key and public booking token key < 32 bytes or still a `change-me` placeholder).
 
 ## 8. Logging & sensitive data
@@ -157,7 +159,7 @@ OWNER vs ADMIN difference: ownership transfer and tenant deletion/suspension req
 - Never log: passwords, tokens (JWT/refresh), cookies, `Authorization` headers, `access_token` query strings, payment data, full request bodies of auth/public booking endpoints.
 - Customer PII in logs: ids only.
 - Audit logs redact sensitive fields (`password_hash`, token hashes) from old/new values.
-- Production error responses: generic message + traceId; details only in logs.
+- Production error responses: generic message + traceId; details only in logs. A temporarily unreachable database answers 503 `SERVICE_UNAVAILABLE` with `Retry-After`, also without details.
 
 ## 9. Audit
 
@@ -198,3 +200,42 @@ Known limitations (accepted, revisit in Phase 12):
 - **Cross-instance cache staleness.** With several API instances, a role change or deactivation is visible immediately on the instance that handled it but may take up to 60 s on others (the membership cache TTL). Refresh tokens are revoked immediately in PostgreSQL, so a deactivated user cannot obtain new access tokens; an existing access token may keep working on another instance for at most 60 s. A Redis pub/sub invalidation can remove this window if needed.
 - **Account enumeration via lockout.** 423 `ACCOUNT_LOCKED` is only returned for existing accounts, so an attacker who triggers 5 failures can learn that an email exists. Accepted because the UX benefit (telling a real user why they cannot sign in) outweighs it; the per-account and per-IP rate limits bound the probing rate.
 - **Access token lifetime.** A stolen access token stays valid until it expires (≤15 min); there is no access-token deny-list. Membership/user-status checks on every request limit the impact.
+
+Phase 12 re-assessed these three and keeps them accepted: all are bounded (60 s, rate limits, 15 min) and RUNBOOKS.md §7 gives the immediate remedy (restart the Api instances).
+
+## 13. Phase 12 production-readiness review (2026-10-05)
+
+**Found and fixed**
+
+| Finding | Fix |
+|---|---|
+| An endpoint without an authorization attribute would have been anonymous. | Deny-by-default fallback policy plus an endpoint audit test (D-092). |
+| The Api and Worker connected to PostgreSQL as the owner, a superuser in the official image. | Migrator-provisioned least-privilege role; tested that DDL, `TRUNCATE` and journal writes are denied (D-095). |
+| JWTs reached the edge proxy's logs: the default access log (with query strings) ran next to ours, and nginx error lines quote `?access_token=`. | Single custom access log with `$uri`; hub error log limited to `crit`; reproduced with the Api stopped and a probe token: 0 occurrences (D-094). |
+| No supported way to create the first platform admin in Production. | `bootstrap-admin` migrator command (D-093). |
+| HSTS max-age was 30 days. | One year. |
+| An app role password containing `;` or a quote would be rotated by the migrator but mis-parsed in the Api/Worker connection strings, locking both out. | Rejected by validation before anything changes (tested). |
+| The proxy cached upstream addresses, so recreating the Api caused 502s until a proxy restart. | Upstreams re-resolve every 5 s; verified by forcing the Api onto a new address (recovered in ~4 s). |
+| A Redis outage made readiness fail although the Api kept serving. | Redis reports `Degraded` (D-097). |
+| A database outage returned 500 `INTERNAL_ERROR`. | 503 `SERVICE_UNAVAILABLE` with `Retry-After` and no details. |
+| Framework DataProtection warnings in every Api start (unused feature). | Log level for that category set to Error. |
+
+**Scans**
+
+- `npm audit`: 0 vulnerabilities. `dotnet list package --vulnerable --include-transitive`: none in any project.
+- Code review greps: no SQL built from input (interpolation only from constants and allow-listed column maps), no `v-html`/`innerHTML`/`eval`, no secrets in the repository (staged-file secret scan before every commit), no logging of passwords, tokens or full emails.
+
+**Live probes against the production-like stack** (`deploy/compose.yml`, Production environment, behind the edge proxy)
+
+| Probe | Result |
+|---|---|
+| Owner of tenant A reads tenant B's venue, board, resources; creates a booking there | 404 on all |
+| Tampered JWT signature; `alg: none` token | 401, 401 |
+| CORS preflight from `https://evil.example` | no `Access-Control-Allow-Origin` |
+| 24 failed logins with a different spoofed `X-Forwarded-For` each | 429 after the per-IP limit (spoofing ignored) |
+| Swagger in Production | 401 from the Api (the SPA serves its own page at `/swagger`) |
+| Security headers | CSP, `nosniff`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` on the SPA; `nosniff`, `DENY`, `no-referrer` on the Api |
+| Guest email addresses in Worker logs | 0 (masked) |
+| Tokens in proxy and Api logs after e2e runs and an upstream outage | 0 |
+
+**Accepted and documented:** RLS not enabled (D-096, R17); no real payment or email provider configured by default (R19, go-live checklist in DEPLOYMENT.md §2.8); the Phase 2 limitations above.

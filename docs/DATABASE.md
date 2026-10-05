@@ -1,6 +1,6 @@
 # Database
 
-Status: **Phases 1–11 implemented (V001–V031).** SQL below is illustrative; the migrations are the source of truth once written, and this document is updated to match them.
+Status: **Phases 1–12 implemented (V001–V031; Phase 12 added no schema changes, only the app role, D-095).** SQL below is illustrative; the migrations are the source of truth once written, and this document is updated to match them.
 
 ## 1. Platform
 
@@ -142,7 +142,7 @@ ALTER TABLE booking_allocations
 
 This makes it impossible — even with an application bug — to allocate Tenant B's resource to Tenant A's booking. The same pattern applies to venues, customers, bookings, sections, resource types and combinations. Application SQL additionally filters every query by `tenant_id`.
 
-Row-Level Security is a candidate defense-in-depth layer, evaluated in Phase 12 (D-024).
+Row-Level Security was evaluated in Phase 12 and is not enabled (D-096): several legitimate paths are cross-tenant by design, and a missing session setting would silently hide data instead of failing. The Api and Worker connect as a least-privilege role (`APP_DB_USER`) that the migrator creates and re-grants on every run: data access on all tables and sequences, read-only on `schema_versions`, no DDL, `NOSUPERUSER NOBYPASSRLS` (D-095). So RLS can be enabled later without changing how the application connects.
 
 ## 4. Double-booking protection (the core invariant)
 

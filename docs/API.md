@@ -1,6 +1,6 @@
 # API
 
-Status: **Phases 1–9 implemented** (health, auth incl. password reset, tenancy, staff, venues, resources, availability, bookings, holds, blocks, board, customers, audit, SignalR, public booking); later sections are the planned surface. Each endpoint is marked with the phase that implements it. This document and Swagger must match the real implementation once built.
+Status: **All phases implemented (1–12).** Health, auth incl. password reset, tenancy, staff, venues, resources, availability, bookings, holds, blocks, board, customers, audit, SignalR, public booking, payments, plans, branding and reports. Each endpoint is marked with the phase that implemented it. Swagger (`/swagger`, Development and Test only) is generated from the same controllers.
 
 ## 1. Conventions
 
@@ -75,8 +75,11 @@ Public endpoints never include internal ids such as `conflictingResourceIds`.
 | RATE_LIMITED | 429 |
 | INTERNAL_ERROR | 500 (generic message, no exception details) |
 | PAYMENT_UNAVAILABLE | 503 (deposit needed but online payments are off or the provider is down) |
+| SERVICE_UNAVAILABLE | 503 with `Retry-After: 5` (the database is temporarily unreachable; retry later) |
 
 Cross-tenant access returns **404** (not 403) so existence of other tenants' records is not revealed.
+
+Access is deny-by-default (D-092): any path without an explicit rule requires a signed-in user, so an unknown path returns **401 `UNAUTHORIZED`** to anonymous callers and **404 `NOT_FOUND`** once signed in. The anonymous surface is exactly: `/health`, `/health/ready`, auth login/refresh/logout and password forgot/reset, the seven public booking routes (§4), `POST /api/v1/payments/webhooks/{provider}` and `POST /api/v1/payments/simulated/complete`; an integration test fails if this set changes.
 
 ## 3. Internal (staff) API
 
@@ -85,7 +88,7 @@ Cross-tenant access returns **404** (not 403) so existence of other tenants' rec
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/health` | Liveness |
-| GET | `/health/ready` | PostgreSQL + Redis |
+| GET | `/health/ready` | PostgreSQL (503 when unreachable) + Redis (`Degraded`, still 200, when unreachable; D-097) |
 | GET | `/swagger` | Development/Test only by default |
 
 ### Auth (Phase 2 — implemented)

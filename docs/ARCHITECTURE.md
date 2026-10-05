@@ -1,6 +1,6 @@
 # Architecture
 
-Status: **Phase 0 — approved (2026-10-05).** Runtime: .NET 10 LTS (D-002).
+Status: **Phase 0 — approved (2026-10-05); implemented through Phase 12.** Runtime: .NET 10 LTS (D-002). The production topology (one origin behind an edge proxy, migrator before Api and Worker, least-privilege database role) is in DEPLOYMENT.md §2 and D-094/D-095.
 
 ## 1. Goals and priorities
 

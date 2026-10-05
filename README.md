@@ -7,8 +7,19 @@ Core model: **Tenant → Venue → Section → Bookable Resource → Availabilit
 
 ## Status
 
-**Phase 2 — Authentication & multi-tenancy: complete.** JWT + rotating refresh-token sign-in, tenant selection and switching, permission-based authorization, staff and tenant settings management, platform tenant administration, and a dev seeder with demo tenants.
-See [`docs/DEVELOPMENT_PHASES.md`](docs/DEVELOPMENT_PHASES.md) for the roadmap and current phase.
+**All phases (0–12) complete.** The MVP includes:
+
+- multi-tenant authentication with venue-scoped roles;
+- venues, resources, combinations and floor plans;
+- an availability engine and a booking engine protected by a PostgreSQL exclusion constraint;
+- a staff board with real-time updates;
+- public booking and guest self-service;
+- outbox-driven email notifications;
+- payment abstractions with deposits;
+- SaaS plans, branding and reports;
+- production hardening: least-privilege database role, deny-by-default authorization, load and accessibility verification, runbooks.
+
+See [`docs/DEVELOPMENT_PHASES.md`](docs/DEVELOPMENT_PHASES.md) for each phase's completion notes, the final architectural test and the deferred items. Going live still needs a hosting choice, an SMTP relay and, for deposits, a real payment provider (DEPLOYMENT.md §2).
 
 ## Stack
 
@@ -30,13 +41,15 @@ docs/                     Architecture, domain, database, API, security, testing
 database/
   migrations/             V###__*.sql, applied in order by DbUp
 docker/                   Dockerfiles (api, worker, web, migrator)
+deploy/                   Production-like stack: compose.yml, edge proxy config, .env.example
+tools/load/               Load and concurrency test (no dependencies)
 scripts/                  Developer scripts (dev-only reset scripts under scripts/dev)
 Backend/
   BookingPlatform.sln
   BookingPlatform.Api/ .Application/ .Domain/ .Infrastructure/ .Worker/ .Migrations/
   Tests/BookingPlatform.UnitTests/ Tests/BookingPlatform.IntegrationTests/
 Frontend/
-  BookingPlatform.Web/    Quasar app (src/, e2e/)
+  BookingPlatform.Web/    Quasar app (src/, test/vitest/, test/e2e/)
 ```
 
 ## Getting started
@@ -93,6 +106,9 @@ All demo accounts use the password from `DEV_ADMIN_PASSWORD` in your `.env`. Nev
 | Integration tests (Docker required) | `dotnet test --project Backend/Tests/BookingPlatform.IntegrationTests` |
 | Frontend lint / tests / build | `npm run lint`, `npm test`, `npm run build` (in `Frontend/BookingPlatform.Web`) |
 | Container images | `docker build -f docker/<api\|worker\|migrator\|web>.Dockerfile -t bookingplatform/<name> .` |
+| Production-like stack | `docker compose -f deploy/compose.yml --env-file deploy/.env up -d --build`, then `… run --rm migrator bootstrap-admin` once (DEPLOYMENT.md §2) |
+| End-to-end tests | `npm run test:e2e` in `Frontend/BookingPlatform.Web` with `E2E_BASE_URL`, `E2E_ADMIN_EMAIL`, `E2E_ADMIN_PASSWORD` |
+| Load / concurrency test | `node tools/load/load-test.mjs` with `LOAD_BASE_URL`, `LOAD_EMAIL`, `LOAD_PASSWORD` (never against a production tenant) |
 | Liveness / readiness | `GET /health`, `GET /health/ready` |
 
 ## Documentation
@@ -108,5 +124,6 @@ All demo accounts use the password from `DEV_ADMIN_PASSWORD` in your `.env`. Nev
 | [docs/SECURITY.md](docs/SECURITY.md) | Authentication, authorization, tenant isolation, threat notes |
 | [docs/TESTING.md](docs/TESTING.md) | Test strategy, mandatory suites |
 | [docs/DEVELOPMENT_PHASES.md](docs/DEVELOPMENT_PHASES.md) | Phase plan, acceptance criteria, deferred items |
-| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Local and production deployment |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Local and production deployment, backups, release verification |
+| [docs/RUNBOOKS.md](docs/RUNBOOKS.md) | Deploy/rollback, migration failure, outbox, outages, secret rotation, incidents |
 | [docs/DECISIONS.md](docs/DECISIONS.md) | Architecture decision log |
