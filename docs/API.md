@@ -1,0 +1,234 @@
+# API
+
+Status: **Phase 0 — planned surface.** Each endpoint is marked with the phase that implements it. This document and Swagger must match the real implementation once built.
+
+## 1. Conventions
+
+- Base paths: internal `/api/v1/...`, public `/api/v1/public/{tenantSlug}/{venueSlug}/...`, hub `/hubs/venue`.
+- JSON, camelCase. Instants as ISO-8601 UTC (`2026-10-05T17:00:00Z`); venue-local values as `date` (`2026-10-05`) and `time` (`19:30`) with the venue `timeZone` in responses where relevant.
+- Auth: `Authorization: Bearer <access token>`; refresh token in httpOnly cookie (`/api/v1/auth` path only).
+- Tenant context comes from the access token (`tid` claim) — **no endpoint accepts a tenantId in the body or query for tenant scoping**.
+- Correlation: clients may send `X-Correlation-Id`; responses always include it and `traceId` appears in errors.
+- State transitions are explicit command endpoints (`POST /bookings/{id}/cancel`), never a status field update.
+- Optimistic concurrency on mutable bookings: `version` in body (or `If-Match`), mismatch → 409 `CONCURRENCY_CONFLICT`.
+
+### Pagination
+
+Request: `?page=1&pageSize=25` (`pageSize` max 100, default 25), optional `sort`.
+Response:
+
+```json
+{ "items": [], "page": 1, "pageSize": 25, "totalCount": 132 }
+```
+
+High-volume append-only lists (audit logs) may use keyset pagination (`?before=<cursor>`), documented per endpoint.
+
+### Idempotency
+
+`POST /bookings` (staff and public) and `POST .../holds` require `Idempotency-Key` (1–100 chars, client-generated UUID recommended).
+Replay returns the original status/body with header `Idempotent-Replayed: true`. Same key, different payload → 409 `IDEMPOTENCY_CONFLICT`. Missing header → 400 `IDEMPOTENCY_KEY_REQUIRED`.
+
+## 2. Error model (RFC 7807)
+
+```json
+{
+  "type": "https://errors.bookingplatform.dev/resource-not-available",
+  "title": "Resource not available",
+  "status": 409,
+  "code": "RESOURCE_NOT_AVAILABLE",
+  "detail": "One or more selected resources are no longer available for the requested time.",
+  "traceId": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+  "conflictingResourceIds": ["0192..."]
+}
+```
+
+Validation errors add `"errors": { "partySize": ["Party size must be greater than 0."] }`.
+Public endpoints never include internal ids such as `conflictingResourceIds`.
+
+| Code | HTTP |
+|---|---|
+| VALIDATION_ERROR | 400 |
+| IDEMPOTENCY_KEY_REQUIRED | 400 |
+| INVALID_BOOKING_TIME | 422 |
+| PARTY_SIZE_NOT_SUPPORTED | 422 |
+| OUTSIDE_OPERATING_HOURS | 422 |
+| UNAUTHORIZED | 401 |
+| INVALID_CREDENTIALS | 401 |
+| ACCOUNT_LOCKED | 423 |
+| FORBIDDEN | 403 |
+| TENANT_NOT_FOUND / VENUE_NOT_FOUND / RESOURCE_NOT_FOUND / BOOKING_NOT_FOUND / CUSTOMER_NOT_FOUND / HOLD_NOT_FOUND | 404 |
+| RESOURCE_NOT_AVAILABLE | 409 |
+| BOOKING_ALREADY_CANCELLED | 409 |
+| INVALID_STATUS_TRANSITION | 409 |
+| CONCURRENCY_CONFLICT | 409 |
+| IDEMPOTENCY_CONFLICT | 409 |
+| HOLD_EXPIRED | 410 |
+| RATE_LIMITED | 429 |
+| INTERNAL_ERROR | 500 (generic message, no exception details) |
+
+Cross-tenant access returns **404** (not 403) so existence of other tenants' records is not revealed.
+
+## 3. Internal (staff) API
+
+### Health & docs (Phase 1)
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/health` | Liveness |
+| GET | `/health/ready` | PostgreSQL + Redis |
+| GET | `/swagger` | Development/Test only by default |
+
+### Auth (Phase 2)
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| POST | `/api/v1/auth/login` | anonymous, rate-limited | Returns access token + memberships; sets refresh cookie. Token is tenant-scoped if the user has exactly one active membership, otherwise the client must call switch-tenant. |
+| POST | `/api/v1/auth/refresh` | refresh cookie | Rotates refresh token; reuse of a rotated token revokes the family. |
+| POST | `/api/v1/auth/logout` | authenticated | Revokes current refresh token family; clears cookie. |
+| GET | `/api/v1/auth/me` | authenticated | User, current tenant, permissions, accessible venues. |
+| POST | `/api/v1/auth/switch-tenant` | authenticated | `{ tenantId }` → server verifies active membership → new tokens. (Selecting is allowed; trusting without verification is not.) |
+| POST | `/api/v1/auth/change-password` | authenticated | Revokes other sessions. |
+
+Password reset / email verification: Phase 9 (needs notifications).
+
+### Tenancy & staff (Phase 2)
+
+| Method | Path | Permission |
+|---|---|---|
+| GET | `/api/v1/tenants/current` | any member |
+| PUT | `/api/v1/tenants/current` | settings.manage |
+| GET | `/api/v1/staff` | staff.view |
+| POST | `/api/v1/staff` | staff.manage (create/invite membership) |
+| GET | `/api/v1/staff/{tenantUserId}` | staff.view |
+| PUT | `/api/v1/staff/{tenantUserId}/roles` | staff.manage (audited; cannot remove last owner) |
+| POST | `/api/v1/staff/{tenantUserId}/deactivate` | staff.manage |
+| GET | `/api/v1/roles` | staff.view |
+| GET/POST | `/api/v1/platform/tenants` | platform admin only |
+
+### Venues (Phase 3)
+
+| Method | Path | Permission |
+|---|---|---|
+| GET | `/api/v1/venues` | venue.view (only accessible venues) |
+| POST | `/api/v1/venues` | venue.manage |
+| GET / PUT | `/api/v1/venues/{venueId}` | venue.view / venue.manage |
+| GET / POST | `/api/v1/venues/{venueId}/sections` | venue.view / venue.manage |
+| PUT / DELETE | `/api/v1/venues/{venueId}/sections/{sectionId}` | venue.manage (delete = deactivate if referenced) |
+| GET / PUT | `/api/v1/venues/{venueId}/operating-hours` | venue.view / venue.manage (replace weekly schedule) |
+| GET / POST | `/api/v1/venues/{venueId}/special-hours` | venue.view / venue.manage |
+| PUT / DELETE | `/api/v1/venues/{venueId}/special-hours/{id}` | venue.manage |
+| GET | `/api/v1/venues/{venueId}/schedule?from&to` | venue.view — effective periods per business date |
+
+### Resources & floor plans (Phase 3)
+
+| Method | Path | Permission |
+|---|---|---|
+| GET / POST | `/api/v1/resource-types` | resource.view / resource.create |
+| PUT | `/api/v1/resource-types/{id}` | resource.update |
+| GET | `/api/v1/resources?venueId&sectionId&resourceTypeId&isActive&page&pageSize` | resource.view |
+| POST | `/api/v1/resources` | resource.create |
+| GET / PUT | `/api/v1/resources/{id}` | resource.view / resource.update |
+| DELETE | `/api/v1/resources/{id}` | resource.delete (deactivates if it has booking history) |
+| GET / POST | `/api/v1/resource-combinations?venueId` | resource.view / resource.create (Phase 4) |
+| PUT / DELETE | `/api/v1/resource-combinations/{id}` | resource.update / resource.delete (Phase 4) |
+| GET | `/api/v1/floor-plans?venueId` | floorplan.view |
+| POST | `/api/v1/floor-plans` | floorplan.manage |
+| GET / PUT / DELETE | `/api/v1/floor-plans/{id}` | floorplan.view / floorplan.manage |
+| PUT | `/api/v1/floor-plans/{id}/resources` | floorplan.manage (bulk positions) |
+
+### Availability, holds, blocks (Phase 4–5)
+
+| Method | Path | Permission |
+|---|---|---|
+| GET | `/api/v1/availability?venueId&date&partySize&durationMinutes&time&sectionId&resourceTypeId` | booking.view |
+| POST | `/api/v1/holds` | booking.create (Idempotency-Key) — Phase 5 |
+| DELETE | `/api/v1/holds/{id}` | booking.create — Phase 5 |
+| GET / POST | `/api/v1/resource-blocks?venueId&from&to` | resource.view / resource.update — Phase 5 |
+| POST | `/api/v1/resource-blocks/{id}/cancel` | resource.update — Phase 5 |
+
+Availability response (staff):
+
+```json
+{
+  "venueId": "…", "date": "2026-10-09", "timeZone": "Africa/Johannesburg", "partySize": 4, "durationMinutes": 120,
+  "slots": [
+    { "time": "19:30", "startsAt": "2026-10-09T17:30:00Z", "endsAt": "2026-10-09T19:30:00Z", "available": true,
+      "options": [
+        { "kind": "RESOURCE", "resourceIds": ["…"], "label": "Table 4", "capacity": 4, "sectionId": "…" },
+        { "kind": "COMBINATION", "combinationId": "…", "resourceIds": ["…","…"], "label": "Table 5 + 6", "capacity": 8 }
+      ] }
+  ]
+}
+```
+
+### Bookings (Phase 5)
+
+| Method | Path | Permission |
+|---|---|---|
+| GET | `/api/v1/bookings?venueId&date&from&to&status&source&customerId&resourceId&sectionId&q&page&pageSize` | booking.view |
+| POST | `/api/v1/bookings` | booking.create (Idempotency-Key required) |
+| GET | `/api/v1/bookings/{id}` | booking.view |
+| PUT | `/api/v1/bookings/{id}` | booking.update (party size, notes, requests, customer; re-validates capacity) |
+| POST | `/api/v1/bookings/{id}/move` | booking.move (time and/or resources, atomic) |
+| POST | `/api/v1/bookings/{id}/confirm` | booking.update |
+| POST | `/api/v1/bookings/{id}/check-in` | booking.checkin |
+| POST | `/api/v1/bookings/{id}/seat` | booking.seat |
+| POST | `/api/v1/bookings/{id}/complete` | booking.seat |
+| POST | `/api/v1/bookings/{id}/no-show` | booking.update |
+| POST | `/api/v1/bookings/{id}/cancel` | booking.cancel (`{ reason }`) |
+| GET | `/api/v1/bookings/{id}/history` | booking.view (status history + events) |
+
+Create request:
+
+```json
+{
+  "venueId": "…",
+  "customer": { "customerId": "…" },
+  "date": "2026-10-09", "time": "19:30", "durationMinutes": 120, "partySize": 4,
+  "allocation": { "mode": "RESOURCES", "resourceIds": ["…"] },
+  "holdToken": null,
+  "source": "PHONE",
+  "status": "CONFIRMED",
+  "specialRequests": "Window seat", "internalNotes": "Regular"
+}
+```
+
+`allocation.mode`: `AUTO` (best fit), `RESOURCES` (explicit ids), `COMBINATION` (`combinationId`). `customer` may instead contain new-customer details. Responses: 201 with booking; 409 `RESOURCE_NOT_AVAILABLE`; 422 rule violations.
+
+### Customers (Phase 6)
+
+| Method | Path | Permission |
+|---|---|---|
+| GET | `/api/v1/customers?q&page&pageSize` | customer.view (search name/phone/email) |
+| POST | `/api/v1/customers` | customer.manage |
+| GET / PUT | `/api/v1/customers/{id}` | customer.view / customer.manage |
+| GET | `/api/v1/customers/{id}/bookings` | customer.view + booking.view |
+| POST | `/api/v1/customers/{id}/anonymize` | customer.manage (POPIA erasure) |
+
+### Audit & reports
+
+| Method | Path | Permission | Phase |
+|---|---|---|---|
+| GET | `/api/v1/audit-logs?entityType&entityId&from&to&before` | settings.manage | 6 |
+| GET | `/api/v1/reports/...` | reports.view | 11 |
+
+## 4. Public API (Phase 8)
+
+Separate controllers and DTOs; never return internal notes, staff data, customer records, or internal ids beyond what's needed.
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/api/v1/public/{tenantSlug}/{venueSlug}` | Name, description, time zone, party size limits, booking window, sections offered online |
+| GET | `/api/v1/public/{tenantSlug}/{venueSlug}/availability?date&partySize[&time]` | Available times only (optionally section names) — no resource ids |
+| POST | `/api/v1/public/{tenantSlug}/{venueSlug}/holds` | Optional short hold during checkout (Idempotency-Key, rate-limited) |
+| POST | `/api/v1/public/{tenantSlug}/{venueSlug}/bookings` | Idempotency-Key; server auto-assigns resources via the same `BookingService` with source `WEBSITE`/`WIDGET` |
+| GET | `/api/v1/public/bookings/{publicToken}` | Confirmation view using an unguessable token |
+| POST | `/api/v1/public/bookings/{publicToken}/cancel` | Customer cancellation within venue policy (Phase 8/9) |
+
+Public booking request: date, time, party size, first/last name, email, phone, special requests, consent flags. Response: reference, venue-local date/time, party size, status, public token link.
+
+Abuse controls: rate limits per IP and per venue, payload size limits, optional bot challenge (decision deferred to Phase 8), email/phone format validation, max active future bookings per contact (configurable).
+
+## 5. SignalR
+
+See `REALTIME.md`. Hub at `/hubs/venue`; methods `JoinVenue(venueId)`, `LeaveVenue(venueId)`.
