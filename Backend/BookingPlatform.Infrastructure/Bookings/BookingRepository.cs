@@ -102,7 +102,8 @@ public sealed class BookingRepository(DbSession db) : IBookingRepository
         await using var grid = await db.QueryMultipleAsync(
             $"""
             SELECT count(*) {from};
-            {SelectBooking} {filter} ORDER BY b.starts_at, b.reference LIMIT @PageSize OFFSET @Offset;
+            {SelectBooking} {filter} ORDER BY {(query.NewestFirst ? "b.starts_at DESC, b.reference DESC" : "b.starts_at, b.reference")}
+            LIMIT @PageSize OFFSET @Offset;
             """,
             new
             {
@@ -119,7 +120,7 @@ public sealed class BookingRepository(DbSession db) : IBookingRepository
                 resourceId = query.ResourceId,
                 sectionId = query.SectionId,
                 q,
-                qLike = q is null ? null : $"%{EscapeLike(q)}%",
+                qLike = SqlText.Contains(q),
                 qDigits = digits is { Length: >= 3 } ? $"%{digits}%" : null,
                 query.Page.PageSize,
                 query.Page.Offset,
@@ -256,9 +257,6 @@ public sealed class BookingRepository(DbSession db) : IBookingRepository
 
     private static string SqlFrom(string filter) =>
         $"FROM bookings b LEFT JOIN customers c ON c.tenant_id = b.tenant_id AND c.id = b.customer_id {filter}";
-
-    private static string EscapeLike(string value) => value.Replace(@"\", @"\\").Replace("%", @"\%").Replace("_", @"\_");
-
     private sealed class BookingRow
     {
         public Guid Id { get; init; }
@@ -322,7 +320,10 @@ public sealed class BookingCustomerRepository(DbSession db) : IBookingCustomerRe
 {
     public Task<BookingCustomerDto?> GetAsync(Guid tenantId, Guid customerId, CancellationToken cancellationToken) =>
         db.QuerySingleOrDefaultAsync<BookingCustomerDto>(
-            "SELECT id, first_name, last_name, email::text AS email, phone FROM customers WHERE tenant_id = @tenantId AND id = @customerId",
+            """
+            SELECT id, first_name, last_name, email::text AS email, phone FROM customers
+            WHERE tenant_id = @tenantId AND id = @customerId AND anonymized_at IS NULL
+            """,
             new { tenantId, customerId }, cancellationToken);
 
     public Task<Guid?> FindByEmailAsync(Guid tenantId, string email, CancellationToken cancellationToken) =>

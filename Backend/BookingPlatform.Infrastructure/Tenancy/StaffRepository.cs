@@ -26,7 +26,7 @@ public sealed class StaffRepository(DbSession db) : IStaffRepository
               AND (@status::text IS NULL OR tu.status = @status)
               AND (@search::text IS NULL OR u.email ILIKE @search OR u.display_name ILIKE @search)
             """;
-        var search = string.IsNullOrWhiteSpace(query.Search) ? null : $"%{EscapeLike(query.Search.Trim())}%";
+        var search = string.IsNullOrWhiteSpace(query.Search) ? null : $"%{SqlText.EscapeLike(query.Search.Trim())}%";
 
         await using var grid = await db.QueryMultipleAsync(
             $"""
@@ -102,9 +102,6 @@ public sealed class StaffRepository(DbSession db) : IStaffRepository
             """,
             new { tenantId, owner = Roles.TenantOwner },
             cancellationToken);
-
-    internal static string EscapeLike(string value) =>
-        value.Replace(@"\", @"\\", StringComparison.Ordinal).Replace("%", @"\%", StringComparison.Ordinal).Replace("_", @"\_", StringComparison.Ordinal);
 
     private static StaffMemberDto Map(StaffRow row) =>
         new(row.TenantUserId, row.UserId, row.Email, row.DisplayName, row.Status, row.Roles, row.VenueIds, row.CreatedAt);

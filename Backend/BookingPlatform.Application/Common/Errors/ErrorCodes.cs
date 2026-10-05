@@ -48,6 +48,7 @@ public static class ErrorCodes
     public const string OutsideOperatingHours = "OUTSIDE_OPERATING_HOURS";
     public const string BookingNotFound = "BOOKING_NOT_FOUND";
     public const string CustomerNotFound = "CUSTOMER_NOT_FOUND";
+    public const string CustomerAnonymized = "CUSTOMER_ANONYMIZED";
     public const string HoldNotFound = "HOLD_NOT_FOUND";
     public const string BlockNotFound = "BLOCK_NOT_FOUND";
     public const string ResourceNotAvailable = "RESOURCE_NOT_AVAILABLE";

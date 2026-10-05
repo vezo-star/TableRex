@@ -99,7 +99,11 @@ public sealed record BookingListQuery(
     Guid? ResourceId,
     Guid? SectionId,
     string? Q,
-    PageRequest Page);
+    PageRequest Page)
+{
+    /// <summary>Orders by start descending (customer history) instead of ascending (day sheets).</summary>
+    public bool NewestFirst { get; init; }
+}
 
 public sealed record BookingStatusHistoryDto(Guid Id, string? FromStatus, string ToStatus, string Source, string? Reason, Guid? ChangedByUserId, DateTime ChangedAt);
 

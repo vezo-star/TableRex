@@ -10,9 +10,15 @@ namespace BookingPlatform.Api.Controllers;
 [ApiController]
 [Route("api/v1/bookings")]
 [Produces("application/json")]
-public sealed class BookingsController(BookingService bookings) : ControllerBase
+public sealed class BookingsController(BookingService bookings, BoardService board) : ControllerBase
 {
     private const string CreateRoute = "/api/v1/bookings";
+
+    /// <summary>The booking board for one venue-local business date: periods, all bookings (any status) and active blocks.</summary>
+    [HttpGet("board")]
+    [HasPermission(Permissions.BookingView)]
+    public Task<BoardDto> Board([FromQuery] Guid venueId, [FromQuery] DateOnly date, CancellationToken cancellationToken) =>
+        board.GetAsync(venueId, date, cancellationToken);
 
     /// <summary>Bookings visible to the caller. <c>status</c> may repeat or be comma-separated; <c>q</c> searches reference, name, email and phone.</summary>
     [HttpGet]

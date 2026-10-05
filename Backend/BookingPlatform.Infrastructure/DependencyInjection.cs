@@ -1,5 +1,8 @@
+using BookingPlatform.Application.Auditing;
 using BookingPlatform.Application.Availability;
 using BookingPlatform.Application.Bookings;
+using BookingPlatform.Application.Customers;
+using BookingPlatform.Infrastructure.Customers;
 using BookingPlatform.Application.Common.Auditing;
 using BookingPlatform.Application.Common.Idempotency;
 using BookingPlatform.Application.Common.Outbox;
@@ -98,6 +101,8 @@ public static class DependencyInjection
         services.AddScoped<IBlockRepository, BlockRepository>();
         services.AddScoped<IIdempotencyStore, IdempotencyStore>();
         services.AddScoped<IOutboxWriter, OutboxWriter>();
+        services.AddScoped<ICustomerRepository, CustomerRepository>();
+        services.AddScoped<IAuditLogRepository, AuditLogRepository>();
 
         return services;
     }
