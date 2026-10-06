@@ -116,6 +116,7 @@ All demo accounts use the password from `DEV_ADMIN_PASSWORD` in your `.env`. Nev
 | Document | Purpose |
 |---|---|
 | [AGENTS.md](AGENTS.md) | Permanent engineering rules |
+| [docs/USER_GUIDE.md](docs/USER_GUIDE.md) | Staff training guide: roles, daily workflows, guest experience, setup, FAQ |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System architecture, modules, frontend architecture |
 | [docs/DOMAIN_MODEL.md](docs/DOMAIN_MODEL.md) | Entities, relationships, status machine, invariants |
 | [docs/DATABASE.md](docs/DATABASE.md) | Schema, migrations, constraints, double-booking protection, indexes |
