@@ -1,0 +1,771 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Booking Platform — Product presentation</title>
+<style>
+  :root {
+    --navy: #0b1b33;
+    --navy-2: #12284a;
+    --ink: #0f172a;
+    --muted: #5b6577;
+    --line: #e3e8ef;
+    --blue: #1976d2;
+    --blue-2: #4f9cf0;
+    --teal: #14b8a6;
+    --amber: #ffa000;
+    --held: #bf360c;
+    --checked: #00796b;
+    --seated: #2e7d32;
+    --completed: #546e7a;
+    --cancelled: #757575;
+    --noshow: #c10015;
+    --paper: #f6f8fb;
+    --font: "Inter", "Segoe UI Variable Display", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #050c18; font-family: var(--font); color: var(--ink); overflow: hidden; }
+  #viewport { position: fixed; inset: 0; display: grid; place-items: center; }
+  #stage { width: 1600px; height: 900px; position: relative; transform-origin: center center; flex: none; }
+
+  .slide {
+    position: absolute; inset: 0; padding: 72px 96px; background: #fff; overflow: hidden;
+    opacity: 0; visibility: hidden; transform: translateX(40px);
+    transition: opacity .5s ease, transform .5s ease, visibility 0s linear .5s;
+    display: flex; flex-direction: column;
+  }
+  .slide.active { opacity: 1; visibility: visible; transform: none; transition: opacity .5s ease, transform .5s ease, visibility 0s; }
+  .slide.past { transform: translateX(-40px); }
+  .slide.center { justify-content: center; padding-bottom: 96px; }
+  .slide.dark { background: radial-gradient(1200px 700px at 85% 10%, #1d4f8f 0%, transparent 60%), radial-gradient(900px 600px at 0% 100%, #0f3b5c 0%, transparent 55%), var(--navy); color: #fff; }
+  .slide.soft { background: var(--paper); }
+
+  .reveal { opacity: 0; transform: translateY(18px); transition: opacity .6s ease, transform .6s ease; transition-delay: calc(var(--i, 0) * 110ms + 150ms); }
+  .slide.active .reveal { opacity: 1; transform: none; }
+
+  .eyebrow { font-size: 18px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--blue); margin: 0 0 18px; }
+  .dark .eyebrow { color: var(--blue-2); }
+  h1 { font-size: 88px; line-height: 1.02; letter-spacing: -.035em; margin: 0; font-weight: 800; }
+  h2 { font-size: 54px; line-height: 1.08; letter-spacing: -.025em; margin: 0 0 18px; font-weight: 800; }
+  h3 { font-size: 26px; margin: 0 0 8px; letter-spacing: -.01em; }
+  p.lead { font-size: 26px; line-height: 1.45; color: var(--muted); margin: 0 0 28px; max-width: 980px; }
+  .dark p.lead { color: #c4d3ea; }
+  .grad { background: linear-gradient(90deg, #7cc0ff, #5eead4); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+  ul.ticks { list-style: none; padding: 0; margin: 0; display: grid; gap: 18px; }
+  ul.ticks li { font-size: 23px; line-height: 1.4; padding-left: 40px; position: relative; color: #283244; }
+  ul.ticks li::before { content: ""; position: absolute; left: 0; top: 6px; width: 24px; height: 24px; border-radius: 50%; background: #e3f0ff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%231976d2' d='M9.5 16.2 5.3 12l-1.4 1.4 5.6 5.6 12-12-1.4-1.4z'/%3E%3C/svg%3E") center/16px no-repeat; }
+  ul.ticks li b { color: var(--ink); }
+  .dark ul.ticks li { color: #d6e2f5; }
+  .dark ul.ticks li b { color: #fff; }
+
+  .split { display: grid; grid-template-columns: 5fr 7fr; gap: 64px; align-items: center; flex: 1; min-height: 0; }
+  .split.even { grid-template-columns: 1fr 1fr; }
+  .split.wide { grid-template-columns: 4fr 8fr; }
+
+  .frame { margin: 0; border-radius: 14px; overflow: hidden; background: #fff; box-shadow: 0 30px 80px -20px rgba(11, 27, 51, .35), 0 0 0 1px rgba(11, 27, 51, .08); }
+  .frame .bar { height: 34px; background: #eef2f7; display: flex; align-items: center; gap: 8px; padding: 0 14px; border-bottom: 1px solid var(--line); }
+  .frame .bar i { width: 12px; height: 12px; border-radius: 50%; background: #ff5f57; }
+  .frame .bar i:nth-child(2) { background: #febc2e; }
+  .frame .bar i:nth-child(3) { background: #28c840; }
+  .frame .bar span { margin-left: 14px; flex: 1; max-width: 520px; height: 22px; border-radius: 6px; background: #fff; font-size: 13px; color: #6b7686; display: flex; align-items: center; padding: 0 10px; }
+  .frame img { display: block; width: 100%; height: auto; }
+  .frame.tilt { transform: perspective(2000px) rotateY(-14deg) rotateX(5deg) rotateZ(1deg); }
+  .dark .frame { box-shadow: 0 40px 120px -20px rgba(0, 0, 0, .7), 0 0 0 1px rgba(255, 255, 255, .08); }
+
+  .phone { margin: 0; width: 300px; padding: 12px; border-radius: 44px; background: #0d1626; box-shadow: 0 40px 90px -25px rgba(11, 27, 51, .55), inset 0 0 0 2px #2b3a55; position: relative; flex: none; }
+  .phone img { display: block; width: 100%; border-radius: 33px; }
+  .phone::before { content: ""; position: absolute; top: 20px; left: 50%; transform: translateX(-50%); width: 90px; height: 24px; border-radius: 14px; background: #0d1626; z-index: 2; }
+
+  .cards { display: grid; gap: 24px; }
+  .cards.c2 { grid-template-columns: repeat(2, 1fr); }
+  .cards.c3 { grid-template-columns: repeat(3, 1fr); }
+  .cards.c4 { grid-template-columns: repeat(4, 1fr); }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 18px; padding: 30px; box-shadow: 0 10px 30px -18px rgba(11, 27, 51, .25); }
+  .soft .card { background: #fff; }
+  .card p { margin: 0; font-size: 20px; line-height: 1.45; color: var(--muted); }
+  .card .icon { width: 52px; height: 52px; border-radius: 14px; display: grid; place-items: center; margin-bottom: 18px; background: #e8f2fe; color: var(--blue); }
+  .card .icon svg { width: 28px; height: 28px; fill: currentColor; }
+  .dark .card { background: rgba(255, 255, 255, .06); border-color: rgba(255, 255, 255, .12); box-shadow: none; }
+  .dark .card p { color: #b9c8e0; }
+  .dark .card .icon { background: rgba(79, 156, 240, .16); color: #8cc4ff; }
+
+  .pill { display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 999px; font-size: 18px; font-weight: 600; background: #eef4fb; color: #23436d; }
+  .dark .pill { background: rgba(255, 255, 255, .1); color: #dbe7f7; }
+  .pills { display: flex; flex-wrap: wrap; gap: 12px; }
+
+  .chip { display: inline-flex; align-items: center; padding: 8px 18px; border-radius: 10px; font-weight: 700; font-size: 20px; color: #fff; white-space: nowrap; }
+
+  .footer { position: absolute; left: 96px; right: 96px; bottom: 30px; display: flex; justify-content: space-between; font-size: 15px; color: #9aa4b4; letter-spacing: .02em; }
+  .dark .footer { color: #6f87a8; }
+
+  .section-no { font-size: 200px; font-weight: 800; letter-spacing: -.06em; line-height: 1; color: rgba(255, 255, 255, .08); position: absolute; right: 80px; bottom: 40px; }
+
+  .hierarchy { display: flex; align-items: stretch; gap: 0; margin-top: 10px; }
+  .hierarchy .node { flex: 1; background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 22px 22px 20px; position: relative; box-shadow: 0 10px 30px -20px rgba(11, 27, 51, .3); }
+  .hierarchy .node + .node { margin-left: 34px; }
+  .hierarchy .node + .node::before { content: ""; position: absolute; left: -28px; top: 50%; width: 22px; height: 22px; transform: translateY(-50%); background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%231976d2' d='M8.6 16.6 13.2 12 8.6 7.4 10 6l6 6-6 6z'/%3E%3C/svg%3E") center/22px no-repeat; }
+  .hierarchy .k { font-size: 15px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--blue); }
+  .hierarchy .v { font-size: 25px; font-weight: 700; margin: 6px 0 6px; }
+  .hierarchy .e { font-size: 17px; color: var(--muted); line-height: 1.35; }
+
+  .flow { display: flex; align-items: center; gap: 14px; flex-wrap: nowrap; }
+  .flow .arrow { width: 34px; height: 3px; background: #c4cfdd; position: relative; flex: none; }
+  .flow .arrow::after { content: ""; position: absolute; right: -2px; top: -5px; border: 6.5px solid transparent; border-left: 9px solid #c4cfdd; border-right: 0; }
+
+  .stat { font-size: 120px; font-weight: 800; letter-spacing: -.05em; line-height: 1; }
+  .stat small { font-size: 34px; letter-spacing: -.01em; font-weight: 700; }
+  .stat-label { font-size: 21px; color: var(--muted); margin-top: 10px; line-height: 1.4; }
+  .dark .stat-label { color: #b9c8e0; }
+  .numbers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 26px; }
+  .numbers .card .stat { font-size: 76px; color: var(--blue); }
+
+  .race { display: grid; grid-template-columns: repeat(10, 1fr); gap: 12px; max-width: 560px; }
+  .race span { aspect-ratio: 1; border-radius: 9px; background: rgba(255, 255, 255, .14); }
+  .race span.win { background: #34d399; box-shadow: 0 0 24px #34d399; }
+  .slide.active .race span { animation: pop .5s ease both; animation-delay: calc(var(--d) * 9ms + 300ms); }
+  @keyframes pop { from { transform: scale(.2); opacity: 0; } to { transform: none; opacity: 1; } }
+
+  table.matrix { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 19px; background: #fff; border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+  table.matrix th, table.matrix td { padding: 13px 16px; text-align: center; border-bottom: 1px solid var(--line); }
+  table.matrix th { background: #f3f6fa; font-size: 16px; text-transform: uppercase; letter-spacing: .06em; color: #4a5568; }
+  table.matrix td:first-child, table.matrix th:first-child { text-align: left; font-weight: 600; }
+  table.matrix tr:last-child td { border-bottom: 0; }
+  .yes { color: var(--seated); font-weight: 800; }
+  .no { color: #c5ccd6; }
+
+  .arch { position: relative; height: 520px; }
+  .box { position: absolute; border-radius: 18px; padding: 20px 24px; background: #fff; border: 1px solid var(--line); box-shadow: 0 16px 40px -24px rgba(11, 27, 51, .35); }
+  .box h3 { font-size: 23px; margin: 0 0 4px; }
+  .box p { margin: 0; font-size: 17px; color: var(--muted); line-height: 1.4; }
+  .box.primary { border: 2px solid var(--blue); }
+  .box.db { border: 2px solid #336791; }
+  .box .tag { display: inline-block; margin-top: 10px; font-size: 14px; font-weight: 700; padding: 4px 10px; border-radius: 8px; background: #eef4fb; color: #23436d; margin-right: 6px; }
+  svg.wires { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+  svg.wires path { fill: none; stroke: #9fb3cc; stroke-width: 2.5; stroke-dasharray: 7 7; }
+  .slide.active svg.wires path { animation: dash 1.2s linear infinite; }
+  @keyframes dash { to { stroke-dashoffset: -28; } }
+  .wire-label { position: absolute; font-size: 15px; font-weight: 600; color: #4a6386; background: #fff; padding: 2px 8px; border-radius: 6px; }
+
+  .plan { border-radius: 22px; padding: 34px; background: #fff; border: 1px solid var(--line); display: flex; flex-direction: column; gap: 14px; }
+  .plan.featured { background: linear-gradient(160deg, #0f2f57, #0b1b33); color: #fff; border: 0; transform: translateY(-14px); box-shadow: 0 30px 70px -25px rgba(11, 27, 51, .6); }
+  .plan .name { font-size: 30px; font-weight: 800; }
+  .plan .for { font-size: 19px; color: var(--muted); }
+  .plan.featured .for { color: #b9c8e0; }
+  .plan ul { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 12px; font-size: 21px; }
+  .plan li::before { content: "✓"; color: var(--seated); font-weight: 800; margin-right: 10px; }
+  .plan.featured li::before { color: #5eead4; }
+
+  .three-shots { display: grid; grid-template-columns: repeat(3, 1fr); gap: 30px; margin-top: 8px; }
+  .three-shots figcaption { margin-top: 18px; }
+  .three-shots figcaption b { display: block; font-size: 22px; margin-bottom: 4px; }
+  .three-shots figcaption span { font-size: 18px; color: var(--muted); line-height: 1.4; }
+  .shot-step { position: relative; }
+  .step-no { position: absolute; top: -18px; left: -18px; z-index: 2; width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; background: var(--blue); color: #fff; font-weight: 800; font-size: 21px; box-shadow: 0 8px 20px -6px rgba(25, 118, 210, .7); }
+
+  .ring { position: absolute; border: 3px solid #ff4d6d; border-radius: 12px; box-shadow: 0 0 0 6px rgba(255, 77, 109, .18); pointer-events: none; }
+  .ring-label { position: absolute; background: #ff4d6d; color: #fff; font-weight: 700; font-size: 15px; padding: 5px 10px; border-radius: 8px; white-space: nowrap; }
+  .rel { position: relative; }
+
+  .roadmap { display: grid; grid-template-columns: repeat(3, 1fr); gap: 26px; }
+  .shot-panel { height: 410px; background: #eef3f9; border-radius: 18px; display: flex; align-items: center; justify-content: center; padding: 22px; }
+  .shot-panel img { max-width: 100%; max-height: 100%; border-radius: 12px; box-shadow: 0 18px 40px -20px rgba(11, 27, 51, .45), 0 0 0 1px rgba(11, 27, 51, .06); background: #fff; }
+  .cardshot { margin: 0; border-radius: 16px; overflow: hidden; background: #fff; box-shadow: 0 30px 80px -24px rgba(11, 27, 51, .4), 0 0 0 1px rgba(11, 27, 51, .08); }
+  .cardshot img { display: block; width: 100%; }
+  .crop img { height: 400px; object-fit: cover; object-position: var(--pos, center top); }
+  .gallery { display: grid; grid-template-columns: repeat(3, 1fr); gap: 26px 30px; }
+  .gallery figure { margin: 0; }
+  .gallery .frame img { width: 122%; max-width: none; margin-left: -20%; height: 250px; object-fit: cover; object-position: left top; }
+  .gallery .frame img.full { width: 100%; margin-left: 0; object-position: center top; }
+  .gallery figcaption { margin-top: 12px; font-size: 20px; font-weight: 700; }
+  .gallery figcaption span { font-weight: 400; color: var(--muted); font-size: 17px; margin-left: 6px; }
+  .roadmap .col { border-radius: 20px; padding: 30px; background: #fff; border: 1px solid var(--line); }
+  .roadmap .col h3 { display: flex; align-items: center; gap: 12px; font-size: 24px; margin-bottom: 18px; }
+  .roadmap .dot { width: 14px; height: 14px; border-radius: 50%; }
+  .roadmap ul { margin: 0; padding-left: 22px; display: grid; gap: 12px; font-size: 20px; color: #334155; line-height: 1.4; }
+
+  /* HUD */
+  #progress { position: fixed; left: 0; top: 0; height: 4px; background: linear-gradient(90deg, var(--blue), var(--teal)); transition: width .4s ease; z-index: 10; }
+  #counter { position: fixed; right: 20px; bottom: 16px; font: 600 13px var(--font); color: rgba(255, 255, 255, .55); z-index: 10; letter-spacing: .05em; user-select: none; }
+  #help { position: fixed; left: 20px; bottom: 16px; font: 500 12px var(--font); color: rgba(255, 255, 255, .35); z-index: 10; user-select: none; }
+  #notes { position: fixed; left: 50%; bottom: 44px; transform: translateX(-50%); width: min(900px, 92vw); max-height: 34vh; overflow: auto; background: rgba(9, 18, 34, .94); color: #e6eefb; border: 1px solid rgba(255, 255, 255, .15); border-radius: 14px; padding: 18px 22px; font: 400 17px/1.55 var(--font); z-index: 20; display: none; }
+  #notes.show { display: block; }
+  #notes b { color: #8cc4ff; font-size: 13px; letter-spacing: .12em; text-transform: uppercase; display: block; margin-bottom: 6px; }
+  aside.notes { display: none; }
+
+  @media print {
+    @page { size: 1600px 900px; margin: 0; }
+    html, body { overflow: visible; height: auto; background: #fff; }
+    #viewport { position: static; display: block; }
+    #stage { transform: none !important; width: 1600px; height: auto; }
+    .slide { position: relative; opacity: 1 !important; visibility: visible !important; transform: none !important; width: 1600px; height: 900px; page-break-after: always; break-after: page; }
+    .reveal { opacity: 1 !important; transform: none !important; }
+    .frame.tilt { transform: none; }
+    #progress, #counter, #help, #notes { display: none !important; }
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; animation: none !important; }
+  }
+</style>
+</head>
+<body>
+<div id="progress"></div>
+<div id="viewport">
+<div id="stage">
+
+<!-- 1. Title -->
+<section class="slide dark">
+  <div class="split" style="grid-template-columns: 6fr 7fr;">
+    <div>
+      <p class="eyebrow reveal" style="--i:0">Product overview</p>
+      <h1 class="reveal" style="--i:1">Every seat.<br><span class="grad">Booked right.</span></h1>
+      <p class="lead reveal" style="--i:2; margin-top: 30px;">Booking Platform is a reservation system for restaurants, clubs, lounges, meeting rooms, spas and courts. It brings the staff booking board, online booking, deposits and live floor management into one product.</p>
+      <div class="pills reveal" style="--i:3">
+        <span class="pill">Multi-venue</span><span class="pill">Real-time</span><span class="pill">Mobile-first booking</span><span class="pill">Deposits</span>
+      </div>
+    </div>
+    <div class="reveal" style="--i:2">
+      <figure class="frame tilt"><div class="bar"><i></i><i></i><i></i><span>Bookings · Demo Restaurant</span></div><img src="img/04-timeline.jpg" alt="Booking board timeline"></figure>
+    </div>
+  </div>
+  <div class="footer"><span>Booking Platform</span><span>2026</span></div>
+  <aside class="notes">Open on the outcome: one place where staff and guests book, and the table can never be double booked. The screenshot is the real booking board for tonight's dinner service at the demo restaurant.</aside>
+</section>
+
+<!-- 2. Problem -->
+<section class="slide soft center">
+  <p class="eyebrow reveal" style="--i:0">The problem</p>
+  <h2 class="reveal" style="--i:1">Bookings still run on phones, paper and hope</h2>
+  <p class="lead reveal" style="--i:2">Every venue that sells time faces the same four headaches.</p>
+  <div class="cards c4" style="margin-top: 10px;">
+    <div class="card reveal" style="--i:3"><div class="icon"><svg viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg></div><h3>Double bookings</h3><p>Two hosts, one table, one awkward evening. Spreadsheets cannot stop two people booking the same slot.</p></div>
+    <div class="card reveal" style="--i:4"><div class="icon"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm5 13.6L15.6 17 12 13.4 8.4 17 7 15.6 10.6 12 7 8.4 8.4 7 12 10.6 15.6 7 17 8.4 13.4 12 17 15.6z"/></svg></div><h3>No-shows</h3><p>An empty table on a full book is lost revenue that cannot be won back later that night.</p></div>
+    <div class="card reveal" style="--i:5"><div class="icon"><svg viewBox="0 0 24 24"><path d="M6.6 10.8a15 15 0 0 0 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1A17 17 0 0 1 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/></svg></div><h3>Phone-only</h3><p>Guests want to book at 23:00 from the couch, not wait on hold during the dinner rush.</p></div>
+    <div class="card reveal" style="--i:6"><div class="icon"><svg viewBox="0 0 24 24"><path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10z"/></svg></div><h3>Many locations</h3><p>Each site runs its own book. Nobody sees the whole business, and every venue sets itself up differently.</p></div>
+  </div>
+  <div class="footer"><span>Booking Platform</span><span>The problem</span></div>
+  <aside class="notes">Keep this short. Ask the audience which of the four hurts most in their venue; the rest of the deck answers each one.</aside>
+</section>
+
+<!-- 3. Solution -->
+<section class="slide center">
+  <p class="eyebrow reveal" style="--i:0">The solution</p>
+  <h2 class="reveal" style="--i:1">One platform, three experiences</h2>
+  <p class="lead reveal" style="--i:2">Staff, guests and owners all work from the same live data, so what the host sees is what the guest can book.</p>
+  <div class="cards c3">
+    <div class="card reveal" style="--i:3"><div class="icon"><svg viewBox="0 0 24 24"><path d="M19 3h-1V1h-2v2H8V1H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zm0 16H5V8h14v11zM7 10h5v5H7z"/></svg></div><h3>Staff console</h3><p>Dashboard, live booking board with timeline, floor and list views, a three-step booking dialog, customers and walk-ins.</p></div>
+    <div class="card reveal" style="--i:4"><div class="icon"><svg viewBox="0 0 24 24"><path d="M16 1H8a3 3 0 0 0-3 3v16a3 3 0 0 0 3 3h8a3 3 0 0 0 3-3V4a3 3 0 0 0-3-3zm-4 21a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm5-4H7V4h10v14z"/></svg></div><h3>Guest booking</h3><p>A branded, mobile-first booking page with no account needed. It handles deposits, confirmation emails and a private link to cancel.</p></div>
+    <div class="card reveal" style="--i:5"><div class="icon"><svg viewBox="0 0 24 24"><path d="M5 9.2h3V19H5zM10.6 5h2.8v14h-2.8zm5.6 8H19v6h-2.8z"/></svg></div><h3>Business owner</h3><p>Venues, opening hours, tables and floor plans, team roles, reports, branding and an audit trail of every change.</p></div>
+  </div>
+  <div class="footer"><span>Booking Platform</span><span>The solution</span></div>
+  <aside class="notes">The key idea is a single source of truth. The guest page, the host board and the reports all read the same database, so availability is never out of sync.</aside>
+</section>
+
+<!-- 4. Generic model -->
+<section class="slide soft center">
+  <p class="eyebrow reveal" style="--i:0">Any venue that sells time</p>
+  <h2 class="reveal" style="--i:1">One model, from tables to tennis courts</h2>
+  <p class="lead reveal" style="--i:2">Nothing in the booking engine is restaurant-specific. A table, a booth, a meeting room and a padel court are all bookable resources.</p>
+  <div class="hierarchy reveal" style="--i:3">
+    <div class="node"><div class="k">Workspace</div><div class="v">Demo Hospitality</div><div class="e">The business. One login can belong to several.</div></div>
+    <div class="node"><div class="k">Venue</div><div class="v">Demo Restaurant</div><div class="e">Address, time zone, opening hours, booking rules.</div></div>
+    <div class="node"><div class="k">Section</div><div class="v">Terrace</div><div class="e">An area: main floor, bar, VIP lounge, floor 2.</div></div>
+    <div class="node"><div class="k">Resource</div><div class="v">Table 6</div><div class="e">Seats 4–6. Can join others as a combination.</div></div>
+    <div class="node" style="border: 2px solid var(--blue);"><div class="k">Booking</div><div class="v">Naledi · 6 · 19:30</div><div class="e">Holds one or more resources for a time slot.</div></div>
+  </div>
+  <div class="pills reveal" style="--i:4; margin-top: 44px;">
+    <span class="pill">Restaurants</span><span class="pill">Clubs &amp; lounges</span><span class="pill">Meeting rooms</span><span class="pill">Coworking</span><span class="pill">Spas</span><span class="pill">Sports courts</span><span class="pill">Event venues</span>
+  </div>
+  <div class="footer"><span>Booking Platform</span><span>Domain model</span></div>
+  <aside class="notes">The demo data includes a restaurant, a club and a coworking space, all on the same engine. Only the words on the screen change, not the rules.</aside>
+</section>
+
+<!-- 5. Divider: staff -->
+<section class="slide dark" style="justify-content: center;">
+  <p class="eyebrow reveal" style="--i:0">Part one</p>
+  <h1 class="reveal" style="--i:1">A shift at the<br>host stand</h1>
+  <p class="lead reveal" style="--i:2; margin-top: 26px;">From the first coffee to the last table, with the real screens.</p>
+  <div class="section-no">01</div>
+  <aside class="notes">We now follow one host through tonight's dinner service at the demo restaurant.</aside>
+</section>
+
+<!-- 6. Dashboard -->
+<section class="slide">
+  <div class="split">
+    <div>
+      <p class="eyebrow reveal" style="--i:0">Dashboard</p>
+      <h2 class="reveal" style="--i:1">Start every shift knowing what's coming</h2>
+      <ul class="ticks">
+        <li class="reveal" style="--i:2"><b>Today at a glance:</b> bookings, covers, guests seated now and late arrivals.</li>
+        <li class="reveal" style="--i:3"><b>Upcoming arrivals:</b> the next eight guests, with late ones flagged in red.</li>
+        <li class="reveal" style="--i:4"><b>By status:</b> how much of tonight is confirmed, pending or already seated.</li>
+        <li class="reveal" style="--i:5"><b>Always current:</b> updates live as colleagues and guests book.</li>
+      </ul>
+    </div>
+    <figure class="frame reveal" style="--i:2"><div class="bar"><i></i><i></i><i></i><span>Dashboard</span></div><img src="img/03-dashboard.jpg" alt="Dashboard"></figure>
+  </div>
+  <div class="footer"><span>Booking Platform</span><span>Staff console</span></div>
+  <aside class="notes">Every number here is for the venue chosen in the header. Staff with several venues switch with one click; a person only sees the venues they are assigned to.</aside>
+</section>
+
+<!-- 7. Timeline -->
+<section class="slide soft">
+  <div class="split wide">
+    <div>
+      <p class="eyebrow reveal" style="--i:0">Booking board</p>
+      <h2 class="reveal" style="--i:1">The whole evening on one screen</h2>
+      <ul class="ticks">
+        <li class="reveal" style="--i:2"><b>Every table, every booking</b>, grouped by section, in the venue's own time zone.</li>
+        <li class="reveal" style="--i:3"><b>Drag to move</b> a booking to another time or table.</li>
+        <li class="reveal" style="--i:4"><b>Double-click a gap</b> to book that table at that time.</li>
+        <li class="reveal" style="--i:5"><b>Live:</b> changes from other devices appear instantly.</li>
+      </ul>
+    </div>
+    <div class="rel reveal" style="--i:2">
+      <figure class="frame"><div class="bar"><i></i><i></i><i></i><span>Bookings · Timeline</span></div><img src="img/04-timeline.jpg" alt="Timeline view"></figure>
+      <div class="ring" style="left: 53.5%; top: 6.6%; width: 6.8%; height: 4.4%;"></div>
+      <div class="ring-label" style="left: 46%; top: -3.2%;">Live updates on</div>
+      <div class="ring" style="left: 44.7%; top: 22%; width: 2.6%; height: 70%; border-color: #ff4d6d;"></div>
+      <div class="ring-label" style="left: 30%; top: 93.5%;">Now (16:00)</div>
+    </div>
+  </div>
+  <div class="footer"><span>Booking Platform</span><span>Staff console</span></div>
+  <aside class="notes">Point out the dashed amber bar: a pending booking still waiting for confirmation. Green bars are seated guests, and hatched areas are outside opening hours. A move goes through the same checks as a new booking, so a conflict is rejected instead of saved.</aside>
+</section>
+
+<!-- 8. Floor -->
+<section class="slide">
+  <div class="split wide">
+    <div>
+      <p class="eyebrow reveal" style="--i:0">Floor view</p>
+      <h2 class="reveal" style="--i:1">See the room, not a spreadsheet</h2>
+      <ul class="ticks">
+        <li class="reveal" style="--i:2"><b>Scrub through time</b> with the slider to see the room at 19:30, or press "Now".</li>
+        <li class="reveal" style="--i:3"><b>Colour is status:</b> free, confirmed, checked in, seated, pending or blocked.</li>
+        <li class="reveal" style="--i:4"><b>Click a table</b> to see who is there, and what else is booked on it today.</li>
+      </ul>
+    </div>
+    <figure class="frame reveal" style="--i:2"><div class="bar"><i></i><i></i><i></i><span>Bookings · Floor</span></div><img src="img/06-floor.jpg" alt="Floor view"></figure>
+  </div>
+  <div class="footer"><span>Booking Platform</span><span>Staff console</span></div>
+  <aside class="notes">Managers draw the floor plan once, by dragging tables into place. The floor view then reuses it for live service. B4 is grey because it is blocked for maintenance.</aside>
+</section>
+
+<!-- 9. New booking -->
+<section class="slide soft">
+  <div class="split wide">
+    <div>
+      <p class="eyebrow reveal" style="--i:0">Taking a booking</p>
+      <h2 class="reveal" style="--i:1">Three steps. No clashes.</h2>
+      <ul class="ticks">
+        <li class="reveal" style="--i:2"><b>When:</b> date, party size and duration, then only times that are really free.</li>
+        <li class="reveal" style="--i:3"><b>The table is held</b> while you type the details, so nobody can take it from under you.</li>
+        <li class="reveal" style="--i:4"><b>Best table picked automatically</b>, or choose one, including joined tables.</li>
+        <li class="reveal" style="--i:5"><b>Walk-ins in seconds:</b> no name needed, seated straight away.</li>
+      </ul>
+    </div>
+    <figure class="frame reveal" style="--i:2"><div class="bar"><i></i><i></i><i></i><span>New booking</span></div><img src="img/08-new-booking.jpg" alt="New booking dialog"></figure>
+  </div>
+  <div class="footer"><span>Booking Platform</span><span>Staff console</span></div>
+  <aside class="notes">The hold lasts five minutes by default and is released when the host goes back or closes the dialog. Staff can book outside the online limits, for example a party of 20, but never outside opening hours or table capacity.</aside>
+</section>
+
+<!-- 10. Lifecycle -->
+<section class="slide">
+  <p class="eyebrow reveal" style="--i:0">Booking lifecycle</p>
+  <h2 class="reveal" style="--i:1">Every guest, from booked to gone</h2>
+  <div class="split" style="grid-template-columns: 8fr 4fr; gap: 56px;">
+    <div>
+      <div class="flow reveal" style="--i:2; margin: 18px 0 26px;">
+        <span class="chip" style="background: var(--amber); color: #111;">Pending</span><span class="arrow"></span>
+        <span class="chip" style="background: var(--blue);">Confirmed</span><span class="arrow"></span>
+        <span class="chip" style="background: var(--checked);">Checked in</span><span class="arrow"></span>
+        <span class="chip" style="background: var(--seated);">Seated</span><span class="arrow"></span>
+        <span class="chip" style="background: var(--completed);">Completed</span>
+      </div>
+      <div class="flow reveal" style="--i:3; margin-bottom: 34px;">
+        <span class="chip" style="background: var(--held);">Held</span>
+        <span style="font-size: 19px; color: var(--muted); margin-left: 8px;">waiting for an online deposit, then Confirmed</span>
+      </div>
+      <div class="flow reveal" style="--i:4; margin-bottom: 40px;">
+        <span class="chip" style="background: var(--cancelled);">Cancelled</span>
+        <span class="chip" style="background: var(--noshow);">No-show</span>
+        <span style="font-size: 19px; color: var(--muted); margin-left: 8px;">free the table immediately</span>
+      </div>
+      <ul class="ticks">
+        <li class="reveal" style="--i:5"><b>One click per step:</b> only the actions that make sense right now are shown.</li>
+        <li class="reveal" style="--i:6"><b>Nothing is ever deleted:</b> full history of every change, move and status.</li>
+        <li class="reveal" style="--i:7"><b>No silent overwrites:</b> if a colleague edits the booking first, you're told.</li>
+      </ul>
+    </div>
+    <figure class="cardshot reveal" style="--i:3"><img src="img/05b-drawer.jpg" alt="Booking drawer" style="aspect-ratio: 880 / 1060; object-fit: cover; object-position: top;"></figure>
+  </div>
+  <div class="footer"><span>Booking Platform</span><span>Staff console</span></div>
+  <aside class="notes">No-show is only possible once the start time has passed, which keeps the no-show rate in reports honest. Permissions decide who sees which button: floor staff can seat and complete, hosts can also cancel and move.</aside>
+</section>
+
+<!-- 11. Divider: guests -->
+<section class="slide dark" style="justify-content: center;">
+  <p class="eyebrow reveal" style="--i:0">Part two</p>
+  <h1 class="reveal" style="--i:1">The guest<br>experience</h1>
+  <p class="lead reveal" style="--i:2; margin-top: 26px;">Book in under a minute, pay a deposit and manage the booking, all without an account.</p>
+  <div class="section-no">02</div>
+  <aside class="notes">Everything in this part is what the guest sees, so staff should know it well enough to help a guest on the phone.</aside>
+</section>
+
+<!-- 12. Mobile booking -->
+<section class="slide soft">
+  <div class="split" style="grid-template-columns: 5fr 3fr 5fr; gap: 50px;">
+    <div>
+      <p class="eyebrow reveal" style="--i:0">Online booking</p>
+      <h2 class="reveal" style="--i:1">Built for the phone in their pocket</h2>
+      <ul class="ticks">
+        <li class="reveal" style="--i:2"><b>Pick a date and party size</b>, then tap a time. Only bookable tables are offered.</li>
+        <li class="reveal" style="--i:3"><b>No account, no password.</b> Name and email are enough.</li>
+        <li class="reveal" style="--i:4"><b>Double taps are safe:</b> a nervous second tap never creates a second booking.</li>
+        <li class="reveal" style="--i:5"><b>Your brand:</b> logo, colour, welcome message and booking terms.</li>
+      </ul>
+    </div>
+    <div class="reveal" style="--i:2; display: grid; place-items: center;"><figure class="phone"><img src="img/22-public-mobile.jpg" alt="Public booking on a phone"></figure></div>
+    <figure class="cardshot reveal" style="--i:3"><img src="img/23-public-details.jpg" alt="Guest details form"></figure>
+  </div>
+  <div class="footer"><span>Booking Platform</span><span>Guest experience</span></div>
+  <aside class="notes">Each venue controls its own online rules: minimum notice, how far ahead, online party-size range, and which tables are bookable online. Larger groups see the venue's phone number instead.</aside>
+</section>
+
+<!-- 13. Deposits -->
+<section class="slide">
+  <p class="eyebrow reveal" style="--i:0">Deposits</p>
+  <h2 class="reveal" style="--i:1">Deposits that make no-shows expensive</h2>
+  <p class="lead reveal" style="--i:2">Set a fixed amount per booking or per guest, and a time limit for paying. Unpaid bookings release the table automatically.</p>
+  <div class="three-shots" style="margin-top: 14px;">
+    <figure class="shot-step reveal" style="--i:3; margin: 0;"><div class="step-no">1</div><div class="shot-panel"><img src="img/24-public-confirmation.jpg" alt="Table held"></div><figcaption><b>Table held</b><span>The booking is Held, and the guest has 30 minutes to pay.</span></figcaption></figure>
+    <figure class="shot-step reveal" style="--i:4; margin: 0;"><div class="step-no">2</div><div class="shot-panel"><img src="img/27-checkout.jpg" alt="Checkout"></div><figcaption><b>Secure checkout</b><span>The payment provider takes the card. A test checkout stands in for it in development.</span></figcaption></figure>
+    <figure class="shot-step reveal" style="--i:5; margin: 0;"><div class="step-no">3</div><div class="shot-panel"><img src="img/28-paid.jpg" alt="Paid and confirmed"></div><figcaption><b>Paid, confirmed</b><span>The booking confirms itself and the guest gets an email. Staff can refund in full or in part.</span></figcaption></figure>
+  </div>
+  <div class="footer"><span>Booking Platform</span><span>Guest experience</span></div>
+  <aside class="notes">If the deposit isn't paid in time, the worker cancels the booking and frees the table without staff doing anything. A payment that arrives too late is flagged in the booking's Payments tab so a manager can refund it. Going live means plugging a real provider into the existing payment interface.</aside>
+</section>
+
+<!-- 14. Emails & manage -->
+<section class="slide soft">
+  <div class="split even">
+    <div>
+      <p class="eyebrow reveal" style="--i:0">Stay informed</p>
+      <h2 class="reveal" style="--i:1">Guests stay informed and in control</h2>
+      <ul class="ticks">
+        <li class="reveal" style="--i:2"><b>Automatic emails</b> when a booking is requested, confirmed or cancelled.</li>
+        <li class="reveal" style="--i:3"><b>A private link</b> to view the booking or cancel it until the venue's cutoff.</li>
+        <li class="reveal" style="--i:4"><b>Replies reach the venue:</b> the reply-to address is the venue's own email.</li>
+        <li class="reveal" style="--i:5"><b>Reliable delivery:</b> emails are queued in the same transaction as the booking and retried if the mail server is down.</li>
+      </ul>
+    </div>
+    <div class="rel reveal" style="--i:2; height: 640px;">
+      <figure class="frame" style="position: absolute; left: 0; top: 30px; width: 92%;"><div class="bar"><i></i><i></i><i></i><span>Inbox · Your booking at Demo Restaurant is confirmed</span></div><img src="img/26-email.jpg" alt="Confirmation email"></figure>
+      <figure class="cardshot" style="position: absolute; right: 0; bottom: 0; width: 44%;"><img src="img/25-manage.jpg" alt="Manage booking page"></figure>
+    </div>
+  </div>
+  <div class="footer"><span>Booking Platform</span><span>Guest experience</span></div>
+  <aside class="notes">The manage link carries a secret token after the # in the address, so it never appears in server logs. Guests can't change the time online; staff do that with Edit or Move.</aside>
+</section>
+
+<!-- 15. Divider: business -->
+<section class="slide dark" style="justify-content: center;">
+  <p class="eyebrow reveal" style="--i:0">Part three</p>
+  <h1 class="reveal" style="--i:1">Running the<br>business</h1>
+  <p class="lead reveal" style="--i:2; margin-top: 26px;">Set up a venue in minutes, give every person the right access, and see what is working.</p>
+  <div class="section-no">03</div>
+  <aside class="notes">This part is for managers, admins and owners.</aside>
+</section>
+
+<!-- 16. Setup -->
+<section class="slide center">
+  <p class="eyebrow reveal" style="--i:0">Setup</p>
+  <h2 class="reveal" style="--i:1">Model any venue in minutes</h2>
+  <div class="three-shots" style="margin-top: 26px;">
+    <figure class="reveal" style="--i:2; margin: 0;"><div class="frame crop" style="--pos: 45% 18%;"><img src="img/11-venue-hours.jpg" alt="Opening hours"></div><figcaption><b>Opening hours</b><span>Several services a day, closing times past midnight, and special days for holidays and events.</span></figcaption></figure>
+    <figure class="reveal" style="--i:3; margin: 0;"><div class="frame crop" style="--pos: 55% 14%;"><img src="img/14-resources.jpg" alt="Resources"></div><figcaption><b>Tables &amp; resources</b><span>Types, capacities, sections, staff-only tables, and combinations for big groups.</span></figcaption></figure>
+    <figure class="reveal" style="--i:4; margin: 0;"><div class="frame crop" style="--pos: 42% 30%;"><img src="img/13-floor-plan.jpg" alt="Floor plan editor"></div><figcaption><b>Floor plans</b><span>Drag, resize and rotate tables. The live floor view uses the same plan.</span></figcaption></figure>
+  </div>
+  <div class="footer"><span>Booking Platform</span><span>Business</span></div>
+  <aside class="notes">Booking rules live on the venue: slot interval, default and maximum duration, turnover buffer, minimum notice, how far ahead, online cancellation cutoff, and auto-confirm on or off.</aside>
+</section>
+
+<!-- 17. Roles -->
+<section class="slide soft">
+  <div class="split" style="grid-template-columns: 7fr 5fr;">
+    <div>
+      <p class="eyebrow reveal" style="--i:0">Teams &amp; permissions</p>
+      <h2 class="reveal" style="--i:1">The right access for every person</h2>
+      <table class="matrix reveal" style="--i:2">
+        <tr><th>Can…</th><th>Owner / Admin</th><th>Manager</th><th>Host</th><th>Staff</th><th>View only</th></tr>
+        <tr><td>See bookings</td><td class="yes">●</td><td class="yes">●</td><td class="yes">●</td><td class="yes">●</td><td class="yes">●</td></tr>
+        <tr><td>Check in, seat, complete</td><td class="yes">●</td><td class="yes">●</td><td class="yes">●</td><td class="yes">●</td><td class="no">—</td></tr>
+        <tr><td>Create, move, cancel</td><td class="yes">●</td><td class="yes">●</td><td class="yes">●</td><td class="no">—</td><td class="no">—</td></tr>
+        <tr><td>Tables, floor plans, reports, refunds</td><td class="yes">●</td><td class="yes">●</td><td class="no">—</td><td class="no">—</td><td class="no">—</td></tr>
+        <tr><td>Venues, staff, settings, audit log</td><td class="yes">●</td><td class="no">—</td><td class="no">—</td><td class="no">—</td><td class="no">—</td></tr>
+      </table>
+    </div>
+    <div>
+      <ul class="ticks" style="margin-top: 120px;">
+        <li class="reveal" style="--i:3"><b>Venue-scoped:</b> people only see the venues they are assigned to.</li>
+        <li class="reveal" style="--i:4"><b>Enforced by the server</b>, not just hidden buttons.</li>
+        <li class="reveal" style="--i:5"><b>Instant offboarding:</b> deactivate someone and they are signed out at once.</li>
+        <li class="reveal" style="--i:6"><b>Audit log:</b> who changed what, when, with before and after values.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer"><span>Booking Platform</span><span>Business</span></div>
+  <aside class="notes">One person can hold different roles in different workspaces. There must always be at least one active owner, and only owners can create other owners.</aside>
+</section>
+
+<!-- 18. Reports -->
+<section class="slide">
+  <div class="split wide">
+    <div>
+      <p class="eyebrow reveal" style="--i:0">Reports</p>
+      <h2 class="reveal" style="--i:1">Know what is working</h2>
+      <ul class="ticks">
+        <li class="reveal" style="--i:2"><b>Key figures:</b> bookings, guests, cancellation and no-show rates.</li>
+        <li class="reveal" style="--i:3"><b>Busiest days and hours</b> to plan staffing.</li>
+        <li class="reveal" style="--i:4"><b>By channel:</b> phone, walk-in, staff or online.</li>
+        <li class="reveal" style="--i:5"><b>Deposits</b> collected and refunded, plus <b>CSV export</b> for spreadsheets.</li>
+      </ul>
+    </div>
+    <figure class="frame reveal" style="--i:2"><div class="bar"><i></i><i></i><i></i><span>Reports</span></div><img src="img/15-reports.jpg" alt="Reports"></figure>
+  </div>
+  <div class="footer"><span>Booking Platform</span><span>Business</span></div>
+  <aside class="notes">Reports cover any range up to a year and are always for one venue, in that venue's time zone. The gaps in the chart are Mondays, when the demo restaurant is closed.</aside>
+</section>
+
+<!-- 18b. Gallery -->
+<section class="slide soft center">
+  <p class="eyebrow reveal" style="--i:0">And the rest</p>
+  <h2 class="reveal" style="--i:1">Everything a busy venue needs</h2>
+  <div class="gallery" style="margin-top: 18px;">
+    <figure class="reveal" style="--i:2"><div class="frame"><img src="img/09-customers.jpg" alt="Customers"></div><figcaption>Customers<span>history, notes, anonymise</span></figcaption></figure>
+    <figure class="reveal" style="--i:3"><div class="frame"><img src="img/10-availability.jpg" alt="Availability"></div><figcaption>Availability<span>what is free, and where</span></figcaption></figure>
+    <figure class="reveal" style="--i:4"><div class="frame"><img src="img/17-staff.jpg" alt="Staff"></div><figcaption>Staff<span>roles and venue access</span></figcaption></figure>
+    <figure class="reveal" style="--i:5"><div class="frame"><img src="img/18-settings.jpg" alt="Settings"></div><figcaption>Settings<span>plan usage and branding</span></figcaption></figure>
+    <figure class="reveal" style="--i:6"><div class="frame"><img src="img/19-audit.jpg" alt="Audit log"></div><figcaption>Audit log<span>every change, before and after</span></figcaption></figure>
+    <figure class="reveal" style="--i:7"><div class="frame"><img class="full" src="img/21-locations.jpg" alt="Locations page"></div><figcaption>Locations page<span>one link for every venue</span></figcaption></figure>
+  </div>
+  <div class="footer"><span>Booking Platform</span><span>Business</span></div>
+  <aside class="notes">A quick tour of the other screens. Each one is covered step by step in the staff training guide.</aside>
+</section>
+
+<!-- 19. Plans -->
+<section class="slide soft center">
+  <p class="eyebrow reveal" style="--i:0">Software as a service</p>
+  <h2 class="reveal" style="--i:1">Plans that grow with the business</h2>
+  <p class="lead reveal" style="--i:2">Each business is a separate, isolated workspace on one shared platform. Reaching a limit only blocks new additions; nothing is ever removed.</p>
+  <div class="cards c3" style="align-items: end; margin-top: 20px;">
+    <div class="plan reveal" style="--i:3"><div class="name">Starter</div><div class="for">A single venue getting started</div><ul><li>1 venue</li><li>5 active staff</li><li>30 resources per venue</li><li>Online booking &amp; deposits</li></ul></div>
+    <div class="plan featured reveal" style="--i:4"><div class="name">Professional</div><div class="for">Growing groups</div><ul><li>5 venues</li><li>25 active staff</li><li>100 resources per venue</li><li>Custom branding</li></ul></div>
+    <div class="plan reveal" style="--i:5"><div class="name">Enterprise</div><div class="for">Large operators</div><ul><li>Unlimited venues</li><li>Unlimited staff</li><li>Unlimited resources</li><li>Custom branding</li></ul></div>
+  </div>
+  <div class="footer"><span>Booking Platform</span><span>Business</span></div>
+  <aside class="notes">Platform administrators create businesses, choose a plan, and can override individual limits per business. Pricing isn't set in the product; these are capability tiers.</aside>
+</section>
+
+<!-- 20. Divider: trust -->
+<section class="slide dark" style="justify-content: center;">
+  <p class="eyebrow reveal" style="--i:0">Part four</p>
+  <h1 class="reveal" style="--i:1">Engineered to<br>be trusted</h1>
+  <p class="lead reveal" style="--i:2; margin-top: 26px;">The rules that matter are enforced by the database and the server, never by hope.</p>
+  <div class="section-no">04</div>
+  <aside class="notes">This part is for technical and security-minded audiences. Skip to the roadmap for an operations audience.</aside>
+</section>
+
+<!-- 21. Concurrency -->
+<section class="slide dark">
+  <div class="split even" style="gap: 80px;">
+    <div>
+      <p class="eyebrow reveal" style="--i:0">No double bookings</p>
+      <h2 class="reveal" style="--i:1">Impossible, not just unlikely</h2>
+      <p class="lead reveal" style="--i:2">We fired 100 booking requests at the same table, for the same time, at the same instant.</p>
+      <div class="reveal" style="--i:3; display: flex; gap: 56px; margin: 10px 0 34px;">
+        <div><div class="stat" style="color: #34d399;">1</div><div class="stat-label">booking created</div></div>
+        <div><div class="stat">99</div><div class="stat-label">told "just taken"</div></div>
+        <div><div class="stat">0</div><div class="stat-label">errors or duplicates</div></div>
+      </div>
+      <ul class="ticks">
+        <li class="reveal" style="--i:4"><b>The database itself refuses overlaps</b>, using an exclusion constraint on table and time.</li>
+        <li class="reveal" style="--i:5"><b>Every create is idempotent:</b> retries and double taps return the original booking.</li>
+        <li class="reveal" style="--i:6"><b>Edits are versioned</b>, so concurrent changes never silently overwrite each other.</li>
+      </ul>
+    </div>
+    <div class="reveal" style="--i:2">
+      <div class="race" id="race"></div>
+      <p style="color: #8ea6c8; font-size: 18px; margin-top: 22px;">100 concurrent requests for one table, from the automated test suite and the load test.</p>
+    </div>
+  </div>
+  <div class="footer"><span>Booking Platform</span><span>Engineering</span></div>
+  <aside class="notes">This runs automatically in the test suite against a real PostgreSQL database in a container, and again as a load test against the production-like stack. The application can't get this wrong, because the database won't store two overlapping active allocations for one resource.</aside>
+</section>
+
+<!-- 22. Security -->
+<section class="slide center">
+  <p class="eyebrow reveal" style="--i:0">Security &amp; privacy</p>
+  <h2 class="reveal" style="--i:1">Secure by default, private by design</h2>
+  <div class="cards c4" style="margin-top: 26px;">
+    <div class="card reveal" style="--i:2"><h3>Tenant isolation</h3><p>Every query is scoped to the business taken from a server-verified token, never from the browser.</p></div>
+    <div class="card reveal" style="--i:3"><h3>Strong sign-in</h3><p>PBKDF2-SHA512 password hashing, rotating refresh tokens with reuse detection, and lockouts.</p></div>
+    <div class="card reveal" style="--i:4"><h3>Rate limits</h3><p>Sign-in, password reset and every public endpoint are throttled against abuse and bots.</p></div>
+    <div class="card reveal" style="--i:5"><h3>Least privilege</h3><p>The app connects as a restricted database role: data access only, no schema changes.</p></div>
+    <div class="card reveal" style="--i:6"><h3>Full audit trail</h3><p>Every change records who made it, when, from where, and the before and after values.</p></div>
+    <div class="card reveal" style="--i:7"><h3>Privacy tools</h3><p>One-click customer anonymisation keeps bookings for reporting but removes personal data.</p></div>
+    <div class="card reveal" style="--i:8"><h3>Hardened web app</h3><p>Strict Content Security Policy, security headers, and no secrets in source control.</p></div>
+    <div class="card reveal" style="--i:9"><h3>Accessible</h3><p>Meets WCAG 2.1 AA: 0 automated accessibility violations across 43 views.</p></div>
+  </div>
+  <div class="footer"><span>Booking Platform</span><span>Engineering</span></div>
+  <aside class="notes">Public pages expose only what a guest needs: no internal notes, no customer records. Errors never leak stack traces outside development.</aside>
+</section>
+
+<!-- 23. Architecture -->
+<section class="slide soft">
+  <p class="eyebrow reveal" style="--i:0">Architecture</p>
+  <h2 class="reveal" style="--i:1">Simple to run, built to scale</h2>
+  <div class="arch reveal" style="--i:2">
+    <svg class="wires" viewBox="0 0 1408 520" preserveAspectRatio="none">
+      <path d="M300 110 C 380 110, 380 110, 470 110"/>
+      <path d="M300 300 C 380 300, 400 160, 470 140"/>
+      <path d="M820 110 C 900 110, 900 90, 990 80"/>
+      <path d="M820 140 C 900 160, 900 270, 990 280"/>
+      <path d="M645 200 L 645 330"/>
+      <path d="M820 400 C 900 400, 900 120, 990 100"/>
+      <path d="M820 420 C 900 440, 920 440, 990 450"/>
+    </svg>
+    <div class="box" style="left: 0; top: 40px; width: 300px;"><h3>Staff console</h3><p>Vue 3 + Quasar web app for hosts, managers and owners.</p></div>
+    <div class="box" style="left: 0; top: 230px; width: 300px;"><h3>Guest booking</h3><p>Public, mobile-first pages per business and venue.</p></div>
+    <div class="box primary" style="left: 470px; top: 40px; width: 350px;"><h3>API</h3><p>ASP.NET Core on .NET 10. REST plus a SignalR hub for live updates.</p><span class="tag">Auth &amp; roles</span><span class="tag">Rate limits</span></div>
+    <div class="box primary" style="left: 470px; top: 330px; width: 350px;"><h3>Worker</h3><p>Delivers emails and live events from the outbox, expires unpaid deposits and old holds.</p></div>
+    <div class="box db" style="left: 990px; top: 20px; width: 418px;"><h3>PostgreSQL 18</h3><p>The single source of truth. Enforces no-overlap, tenant consistency and every key rule.</p></div>
+    <div class="box" style="left: 990px; top: 220px; width: 418px;"><h3>Redis</h3><p>SignalR backplane and coordination. Never trusted for availability.</p></div>
+    <div class="box" style="left: 990px; top: 400px; width: 418px;"><h3>Email &amp; payments</h3><p>SMTP relay and a pluggable payment provider behind clean interfaces.</p></div>
+    <div class="wire-label" style="left: 655px; top: 252px;">transactional outbox</div>
+  </div>
+  <div class="pills reveal" style="--i:3; margin-top: 6px;">
+    <span class="pill">Modular monolith: one API + one worker</span><span class="pill">Docker Compose deploy</span><span class="pill">GitLab CI</span><span class="pill">Plain SQL migrations</span><span class="pill">Health checks</span>
+  </div>
+  <div class="footer"><span>Booking Platform</span><span>Engineering</span></div>
+  <aside class="notes">Deliberately boring technology: one API and one background worker sharing the same code, rather than microservices. Side effects such as emails and live updates are written to an outbox in the same database transaction as the booking, so a booking never exists without its notification, or the other way round. If Redis goes down, bookings keep working; only live updates pause, and screens fall back to refreshing every minute.</aside>
+</section>
+
+<!-- 24. Quality numbers -->
+<section class="slide center">
+  <p class="eyebrow reveal" style="--i:0">Quality</p>
+  <h2 class="reveal" style="--i:1">Proven, not promised</h2>
+  <div class="numbers" style="margin-top: 30px;">
+    <div class="card reveal" style="--i:2"><div class="stat">337</div><div class="stat-label">backend tests, run against real PostgreSQL and Redis in containers</div></div>
+    <div class="card reveal" style="--i:3"><div class="stat">247</div><div class="stat-label">frontend unit tests across stores, pages and components</div></div>
+    <div class="card reveal" style="--i:4"><div class="stat">6</div><div class="stat-label">end-to-end browser journeys, staff and guest, on a production-like stack</div></div>
+    <div class="card reveal" style="--i:5"><div class="stat">0</div><div class="stat-label">accessibility violations across 43 views, desktop and 360 px mobile</div></div>
+    <div class="card reveal" style="--i:6"><div class="stat">31</div><div class="stat-label">ordered SQL migrations, rebuilt from an empty database in CI</div></div>
+    <div class="card reveal" style="--i:7"><div class="stat">~550<small> req/s</small></div><div class="stat-label">availability and board reads at 50 concurrent users, p95 under 400 ms (local hardware)</div></div>
+  </div>
+  <div class="footer"><span>Booking Platform</span><span>Engineering</span></div>
+  <aside class="notes">All numbers come from the latest full verification run, recorded in docs/TESTING.md. The read throughput was measured on a developer machine running the full stack, so treat it as a floor, not a ceiling.</aside>
+</section>
+
+<!-- 25. Roadmap -->
+<section class="slide soft center">
+  <p class="eyebrow reveal" style="--i:0">What's next</p>
+  <h2 class="reveal" style="--i:1">The road to launch</h2>
+  <div class="roadmap" style="margin-top: 26px;">
+    <div class="col reveal" style="--i:2"><h3><span class="dot" style="background: var(--seated);"></span>Ready today</h3><ul><li>Staff console, live board and floor view</li><li>Online booking, deposits and self-service cancel</li><li>Teams, roles and venue access</li><li>Reports, branding and plans</li><li>Production Docker stack, runbooks and backups</li></ul></div>
+    <div class="col reveal" style="--i:3"><h3><span class="dot" style="background: var(--amber);"></span>Needed to go live</h3><ul><li>Choose hosting and a domain</li><li>Connect an SMTP relay for emails</li><li>Connect a real payment provider for deposits</li><li>Pilot with one venue</li></ul></div>
+    <div class="col reveal" style="--i:4"><h3><span class="dot" style="background: var(--blue);"></span>Next improvements</h3><ul><li>Staff alerts for new online bookings</li><li>Invite emails and admin password reset</li><li>Suspend or reactivate a business</li><li>Venue-neutral wording on guest pages</li></ul></div>
+  </div>
+  <div class="footer"><span>Booking Platform</span><span>Roadmap</span></div>
+  <aside class="notes">The three go-live items are integrations, not missing features; the abstractions for each are already in place. The improvements column came out of writing the staff training guide.</aside>
+</section>
+
+<!-- 26. Close -->
+<section class="slide dark" style="justify-content: center; align-items: flex-start;">
+  <p class="eyebrow reveal" style="--i:0">Thank you</p>
+  <h1 class="reveal" style="--i:1">Every seat.<br><span class="grad">Booked right.</span></h1>
+  <p class="lead reveal" style="--i:2; margin-top: 30px;">Try it yourself: book a table as a guest, then watch it appear live on the host's board.</p>
+  <div class="pills reveal" style="--i:3">
+    <span class="pill">Guest page: /book/demo-hospitality/demo-restaurant</span>
+    <span class="pill">Staff training guide: docs/USER_GUIDE.md</span>
+  </div>
+  <div class="section-no">?</div>
+  <aside class="notes">A strong live finish: open the guest page on a phone, book, and show the bar appear on the timeline on the projector with no refresh.</aside>
+</section>
+
+</div>
+</div>
+<div id="counter"></div>
+<div id="help">← → navigate · F fullscreen · N notes · P print</div>
+<div id="notes"></div>
+
+<script>
+  (() => {
+    const stage = document.getElementById('stage')
+    const slides = [...document.querySelectorAll('.slide')]
+    const progress = document.getElementById('progress')
+    const counter = document.getElementById('counter')
+    const notes = document.getElementById('notes')
+    let index = 0
+
+    const race = document.getElementById('race')
+    for (let i = 0; i < 100; i++) {
+      const cell = document.createElement('span')
+      cell.style.setProperty('--d', i)
+      if (i === 37) cell.className = 'win'
+      race.appendChild(cell)
+    }
+
+    function fit() {
+      const scale = Math.min(window.innerWidth / 1600, window.innerHeight / 900)
+      stage.style.transform = `scale(${scale})`
+    }
+
+    function show(next, push = true) {
+      index = Math.max(0, Math.min(slides.length - 1, next))
+      slides.forEach((s, i) => {
+        s.classList.toggle('active', i === index)
+        s.classList.toggle('past', i < index)
+      })
+      progress.style.width = `${((index + 1) / slides.length) * 100}%`
+      counter.textContent = `${index + 1} / ${slides.length}`
+      const note = slides[index].querySelector('aside.notes')
+      notes.innerHTML = note ? `<b>Speaker notes</b>${note.innerHTML}` : ''
+      if (push) history.replaceState(null, '', `#${index + 1}`)
+    }
+
+    window.addEventListener('keydown', (e) => {
+      if (e.altKey || e.ctrlKey || e.metaKey) return
+      const k = e.key
+      if (['ArrowRight', 'PageDown', ' ', 'Enter'].includes(k)) { e.preventDefault(); show(index + 1) }
+      else if (['ArrowLeft', 'PageUp', 'Backspace'].includes(k)) { e.preventDefault(); show(index - 1) }
+      else if (k === 'Home') show(0)
+      else if (k === 'End') show(slides.length - 1)
+      else if (k === 'f' || k === 'F') {
+        if (document.fullscreenElement) document.exitFullscreen()
+        else document.documentElement.requestFullscreen?.()
+      } else if (k === 'n' || k === 'N') notes.classList.toggle('show')
+      else if (k === 'p' || k === 'P') window.print()
+    })
+
+    let touchX = null
+    window.addEventListener('touchstart', (e) => { touchX = e.touches[0].clientX }, { passive: true })
+    window.addEventListener('touchend', (e) => {
+      if (touchX === null) return
+      const dx = e.changedTouches[0].clientX - touchX
+      if (Math.abs(dx) > 50) show(index + (dx < 0 ? 1 : -1))
+      touchX = null
+    })
+    window.addEventListener('click', (e) => {
+      if (e.target.closest('#notes')) return
+      show(index + (e.clientX > window.innerWidth / 3 ? 1 : -1))
+    })
+    window.addEventListener('resize', fit)
+    window.addEventListener('hashchange', () => show(parseInt(location.hash.slice(1), 10) - 1 || 0, false))
+
+    fit()
+    show((parseInt(location.hash.slice(1), 10) || 1) - 1, false)
+  })()
+</script>
+</body>
+</html>
