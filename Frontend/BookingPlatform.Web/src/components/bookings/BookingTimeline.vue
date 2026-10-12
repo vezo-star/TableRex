@@ -408,7 +408,7 @@ onBeforeUnmount(() => {
   border-bottom: 1px solid #eeeeee;
 }
 .timeline-row.drop-target .timeline-track {
-  background: #e3f2fd;
+  background: #fbe3db;
 }
 .grid-line {
   position: absolute;
@@ -441,19 +441,23 @@ onBeforeUnmount(() => {
   touch-action: none;
 }
 .booking {
-  border: 1px solid #90caf9;
+  border: 1px solid #9db2b8;
   border-left-width: 4px;
+  color: var(--tr-dark);
 }
 .booking.status-SEATED {
-  border-color: #66bb6a;
+  border-color: #c2553a;
 }
 .booking.status-CHECKED_IN {
-  border-color: #26a69a;
+  border-color: #d9a777;
 }
 .booking.status-PENDING,
 .booking.status-HELD {
-  border-color: #ffb300;
+  border-color: #d9a441;
   border-style: dashed;
+}
+.booking.status-HELD {
+  border-color: #e06c4f;
 }
 .booking.status-COMPLETED,
 .booking.status-CANCELLED,

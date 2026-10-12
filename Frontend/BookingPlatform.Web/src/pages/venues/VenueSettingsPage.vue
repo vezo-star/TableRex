@@ -43,7 +43,7 @@
         ACTIVE to share {{ publicUrl }}.
       </template>
       <template v-if="publicBookingOpen" #action>
-        <q-btn flat dense no-caps color="blue-9" icon="content_copy" label="Copy" @click="copy" />
+        <q-btn flat dense no-caps color="primary" icon="content_copy" label="Copy" @click="copy" />
       </template>
     </q-banner>
 

@@ -39,6 +39,9 @@ Your role is set by an Owner or Admin on the Staff page. Menu items you have no 
 
 ## 3. Getting started
 
+host@demo.local, staff@demo.local, manager@demo.local and admin@demo.local;
+Dev-oZjV7rCoksuW3YhRy8xIcTfk
+
 ### Signing in
 
 1. Open the app and go to **"Sign in to your workspace"**.

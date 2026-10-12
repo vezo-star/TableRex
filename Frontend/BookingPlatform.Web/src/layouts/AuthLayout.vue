@@ -1,9 +1,11 @@
 <template>
   <q-layout view="hHh lpR fFf">
     <q-page-container>
-      <q-page class="flex flex-center bg-grey-2">
-        <q-card flat bordered class="auth-card q-pa-lg">
-          <div class="text-h6 text-center q-mb-md">Booking Platform</div>
+      <q-page class="tr-auth-page flex flex-center q-pa-md">
+        <q-card flat class="auth-card q-pa-lg">
+          <div class="row justify-center q-mb-lg">
+            <TableRexLogo :size="44" show-tagline />
+          </div>
           <router-view />
         </q-card>
       </q-page>
@@ -12,6 +14,8 @@
 </template>
 
 <script setup>
+import TableRexLogo from '@/components/brand/TableRexLogo.vue'
+
 defineOptions({ name: 'AuthLayout' })
 </script>
 
@@ -19,5 +23,8 @@ defineOptions({ name: 'AuthLayout' })
 .auth-card {
   width: 100%;
   max-width: 400px;
+  border-radius: 22px;
+  background: var(--tr-white);
+  box-shadow: 0 30px 60px -20px rgba(0, 0, 0, 0.45);
 }
 </style>

@@ -69,7 +69,7 @@
             type="color"
             class="color-swatch"
             aria-label="Pick a brand colour"
-            :value="safeBrandColor(form.primaryColor) ?? '#1976d2'"
+            :value="safeBrandColor(form.primaryColor) ?? '#12232a'"
             :disabled="!branding.enabled"
             @input="form.primaryColor = $event.target.value"
           />

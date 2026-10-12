@@ -10,7 +10,7 @@ export default defineConfig(() => {
 
     css: ['app.css'],
 
-    extras: ['roboto-font', 'material-icons'],
+    extras: ['material-icons'],
 
     build: {
       target: {

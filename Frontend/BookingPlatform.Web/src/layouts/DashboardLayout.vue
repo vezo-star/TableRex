@@ -1,6 +1,6 @@
 <template>
   <q-layout view="hHh lpR fFf">
-    <q-header elevated class="bg-primary text-white">
+    <q-header class="tr-header">
       <q-toolbar>
         <q-btn
           v-if="auth.isAuthenticated"
@@ -12,7 +12,9 @@
           data-test="drawer-toggle"
           @click="drawerOpen = !drawerOpen"
         />
-        <q-toolbar-title>Booking Platform</q-toolbar-title>
+        <q-toolbar-title class="row items-center no-wrap">
+          <TableRexLogo on-dark :size="34" class="dashboard-logo" />
+        </q-toolbar-title>
 
         <template v-if="auth.isAuthenticated">
           <RealtimeIndicator v-if="auth.hasTenant" />
@@ -75,9 +77,25 @@
       </q-toolbar>
     </q-header>
 
-    <q-drawer v-if="auth.isAuthenticated" v-model="drawerOpen" show-if-above bordered :width="240">
+    <q-drawer
+      v-if="auth.isAuthenticated"
+      v-model="drawerOpen"
+      show-if-above
+      bordered
+      :width="240"
+      class="tr-drawer"
+    >
       <q-list padding role="navigation" aria-label="Main navigation">
-        <q-item v-for="item in navigation" :key="item.label" v-ripple :to="item.to" exact clickable>
+        <q-item
+          v-for="item in navigation"
+          :key="item.label"
+          v-ripple
+          :to="item.to"
+          exact
+          clickable
+          class="tr-nav-item"
+          active-class="tr-nav-active"
+        >
           <q-item-section avatar>
             <q-icon :name="item.icon" />
           </q-item-section>
@@ -96,6 +114,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useQuasar } from 'quasar'
+import TableRexLogo from '@/components/brand/TableRexLogo.vue'
 import RealtimeIndicator from '@/components/common/RealtimeIndicator.vue'
 import VenueSwitcher from '@/components/venues/VenueSwitcher.vue'
 import { dashboardNavigation, RouteNames, visibleNavigation } from '@/constants/navigation.js'
@@ -151,3 +170,11 @@ async function logout() {
   await router.replace({ name: RouteNames.LOGIN })
 }
 </script>
+
+<style scoped>
+@media (max-width: 599px) {
+  .dashboard-logo {
+    display: none;
+  }
+}
+</style>

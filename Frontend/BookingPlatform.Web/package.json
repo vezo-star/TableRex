@@ -1,8 +1,8 @@
 {
   "name": "booking-platform-web",
   "version": "0.1.0",
-  "description": "Booking Platform staff dashboard and public booking web application",
-  "productName": "Booking Platform",
+  "description": "TableRex staff dashboard and public booking web application",
+  "productName": "TableRex",
   "type": "module",
   "private": true,
   "scripts": {

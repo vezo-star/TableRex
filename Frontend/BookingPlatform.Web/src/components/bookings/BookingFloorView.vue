@@ -167,13 +167,13 @@ const props = defineProps({
 defineEmits(['select', 'select-block', 'create'])
 
 const FREE_FILL = '#ffffff'
-const BLOCK_FILL = '#bdbdbd'
+const BLOCK_FILL = '#dcd6cc'
 const FLOOR_FILLS = {
-  PENDING: '#ffe082',
-  HELD: '#ffccbc',
-  CONFIRMED: '#90caf9',
-  CHECKED_IN: '#80cbc4',
-  SEATED: '#a5d6a7',
+  PENDING: '#f6d58e',
+  HELD: '#fbe3db',
+  CONFIRMED: '#c9d6d9',
+  CHECKED_IN: '#f2c9a0',
+  SEATED: '#e06c4f',
 }
 
 const planId = ref(null)
@@ -253,9 +253,9 @@ watch(
 
 <style scoped>
 .floor-canvas {
-  border: 1px solid #e0e0e0;
-  border-radius: 4px;
-  background: #fafafa;
+  border: 1px solid var(--tr-line);
+  border-radius: 12px;
+  background: var(--tr-cream);
   height: 60vh;
   min-height: 320px;
 }
@@ -267,7 +267,7 @@ watch(
   display: inline-block;
   width: 14px;
   height: 14px;
-  border: 1px solid #9e9e9e;
+  border: 1px solid #a9bcc1;
   border-radius: 3px;
   margin-right: 4px;
 }

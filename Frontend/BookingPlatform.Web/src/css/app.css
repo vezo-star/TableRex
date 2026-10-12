@@ -1,8 +1,140 @@
-/* app global css */
+/* app global css: TableRex brand theme (D-101) */
 
-/* Quasar's default positive (#21ba45) gives white text a 2.6:1 contrast; WCAG AA needs 4.5:1. */
+@font-face {
+  font-family: 'Fraunces';
+  src: url('./fonts/fraunces-var.woff2') format('woff2');
+  font-weight: 300 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Outfit';
+  src: url('./fonts/outfit-var.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
+  --tr-dark: #12232a;
+  --tr-dark-2: #1b3139;
+  --tr-dark-3: #24404a;
+  --tr-coral: #e06c4f;
+  --tr-coral-ink: #b04a30;
+  --tr-cream: #f7f1e8;
+  --tr-cream-2: #efe6d8;
+  --tr-light: #c9d6d9;
+  --tr-muted: #4a5d64;
+  --tr-white: #fffdf9;
+  --tr-line: #e6ddcf;
+
+  --tr-serif: 'Fraunces', Georgia, 'Times New Roman', serif;
+  --tr-sans: 'Outfit', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --tr-shadow: 0 1px 2px rgba(18, 35, 42, 0.06), 0 12px 32px -12px rgba(18, 35, 42, 0.18);
+
+  --q-primary: #12232a;
+  --q-secondary: #b04a30;
+  --q-accent: #e06c4f;
+  --q-dark: #12232a;
+  /* Quasar's default positive (#21ba45) gives white text a 2.6:1 contrast; WCAG AA needs 4.5:1. */
   --q-positive: #2e7d32;
+  --q-negative: #b3261e;
+}
+
+body {
+  font-family: var(--tr-sans);
+  color: var(--tr-dark);
+  background: var(--tr-cream);
+  -webkit-font-smoothing: antialiased;
+}
+
+.text-h1,
+.text-h2,
+.text-h3,
+.text-h4,
+.text-h5,
+.text-h6 {
+  font-family: var(--tr-serif);
+  letter-spacing: -0.01em;
+}
+
+/* Quasar greys re-tinted to the brand's muted teal; both stay above 4.5:1 on cream and white. */
+.text-grey-7 {
+  color: var(--tr-muted) !important;
+}
+.text-grey-8 {
+  color: #33474e !important;
+}
+.bg-grey-1,
+.bg-grey-2 {
+  background: var(--tr-cream-2) !important;
+}
+.bg-blue-1 {
+  background: #e4ecee !important;
+}
+
+.q-card {
+  border-radius: 14px;
+}
+.q-card--bordered {
+  border-color: var(--tr-line);
+}
+.q-page-container .q-card:not(.q-card--flat) {
+  box-shadow: var(--tr-shadow);
+}
+
+.q-btn {
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.q-btn--rectangle {
+  border-radius: 10px;
+}
+
+a {
+  color: var(--tr-coral-ink);
+}
+
+:focus-visible {
+  outline: 3px solid var(--tr-coral);
+  outline-offset: 2px;
+}
+
+/* Layout chrome */
+.tr-header {
+  background: var(--tr-dark);
+  color: var(--tr-cream);
+  border-bottom: 1px solid rgba(201, 214, 217, 0.08);
+}
+.tr-drawer.q-drawer {
+  background: var(--tr-white);
+}
+.tr-nav-item {
+  margin: 2px 12px 2px 0;
+  border-radius: 0 999px 999px 0;
+}
+.tr-nav-item.tr-nav-active {
+  color: var(--tr-coral-ink);
+  background: rgba(224, 108, 79, 0.12);
+  box-shadow: inset 4px 0 0 var(--tr-coral);
+  font-weight: 600;
+}
+.tr-auth-page {
+  background:
+    radial-gradient(900px 500px at 85% 10%, rgba(224, 108, 79, 0.16), transparent 60%),
+    radial-gradient(rgba(201, 214, 217, 0.09) 1.2px, transparent 1.3px) 0 0 / 26px 26px,
+    var(--tr-dark);
+}
+.tr-public-header {
+  background: var(--tr-white);
+  color: var(--tr-dark);
+  border-bottom: 1px solid var(--tr-line);
+}
+.tr-public-footer {
+  background: var(--tr-white);
+  color: var(--tr-muted);
+  border-top: 1px solid var(--tr-line);
 }
 
 .page-narrow {

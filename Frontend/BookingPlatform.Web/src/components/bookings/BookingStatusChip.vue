@@ -2,8 +2,7 @@
   <q-chip
     dense
     square
-    :color="meta.color"
-    :text-color="meta.textColor ?? 'white'"
+    :style="{ backgroundColor: meta.chipBg, color: meta.chipText }"
     :icon="meta.icon"
     :label="meta.label"
     class="q-ma-none"

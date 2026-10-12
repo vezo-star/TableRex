@@ -45,7 +45,7 @@
         :rx="position.width / 2"
         :ry="position.height / 2"
         :fill="fillFor(position)"
-        :stroke="position.resourceId === selectedId ? '#1976d2' : '#757575'"
+        :stroke="position.resourceId === selectedId ? '#b04a30' : '#7d9198'"
         :stroke-width="position.resourceId === selectedId ? 3 : 1.5"
       />
       <rect
@@ -54,7 +54,7 @@
         :height="position.height"
         rx="6"
         :fill="fillFor(position)"
-        :stroke="position.resourceId === selectedId ? '#1976d2' : '#757575'"
+        :stroke="position.resourceId === selectedId ? '#b04a30' : '#7d9198'"
         :stroke-width="position.resourceId === selectedId ? 3 : 1.5"
       />
       <text
@@ -76,7 +76,7 @@
         :y="position.height - 7"
         width="14"
         height="14"
-        fill="#1976d2"
+        fill="#b04a30"
         class="fp-resize"
         data-test="resize-handle"
         @pointerdown.stop="startDrag($event, position, 'resize')"
@@ -125,7 +125,7 @@ function fillFor(p) {
   if (props.fills[p.resourceId]) {
     return props.fills[p.resourceId]
   }
-  return p.resourceId === props.selectedId ? '#e3f2fd' : '#ffffff'
+  return p.resourceId === props.selectedId ? '#fbe3db' : '#ffffff'
 }
 
 /** SVG user units per screen pixel (the canvas scales to its container). */
@@ -175,7 +175,7 @@ onBeforeUnmount(endDrag)
   width: 100%;
   height: auto;
   max-height: 75vh;
-  background: #fafafa;
+  background: #fbf8f3;
   touch-action: none;
   user-select: none;
 }
@@ -188,12 +188,12 @@ onBeforeUnmount(endDrag)
 .fp-label {
   font-size: 16px;
   font-weight: 600;
-  fill: #424242;
+  fill: #12232a;
   pointer-events: none;
 }
 .fp-capacity {
   font-size: 12px;
   font-weight: 400;
-  fill: #757575;
+  fill: #12232a;
 }
 </style>

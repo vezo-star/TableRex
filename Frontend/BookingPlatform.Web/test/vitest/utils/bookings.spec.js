@@ -11,8 +11,11 @@ import {
   occupancyAt,
   placeInterval,
   snapStart,
+  StatusMeta,
+  statusMeta,
   summariseDay,
 } from '@/utils/bookings.js'
+import { luminance } from '@/utils/branding.js'
 import { zonedTimeToUtc } from '@/utils/dates.js'
 
 const TZ = 'Africa/Johannesburg'
@@ -190,6 +193,25 @@ describe('groupResources', () => {
     )
     expect(groups.map((g) => g.name)).toEqual(['Inside', 'Patio', 'Other'])
     expect(groups[0].resources.map((r) => r.id)).toEqual(['r2'])
+  })
+})
+
+describe('status palette', () => {
+  const contrast = (a, b) => {
+    const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x)
+    return (hi + 0.05) / (lo + 0.05)
+  }
+
+  it.each([...Object.keys(StatusMeta), 'UNKNOWN'])(
+    '%s chip label keeps WCAG AA contrast (4.5:1)',
+    (status) => {
+      const meta = statusMeta(status)
+      expect(contrast(meta.chipText, meta.chipBg)).toBeGreaterThanOrEqual(4.5)
+    },
+  )
+
+  it.each(Object.keys(StatusMeta))('%s timeline fill keeps dark text at AA contrast', (status) => {
+    expect(contrast('#12232a', StatusMeta[status].fill)).toBeGreaterThanOrEqual(4.5)
   })
 })
 

@@ -21,22 +21,70 @@ export const ACTIVE_STATUSES = Object.freeze([
   BookingStatus.SEATED,
 ])
 
-/** Chip colours keep the label at WCAG AA contrast (4.5:1) against `textColor` (white unless set). */
+const INK = '#12232a'
+const WHITE = '#ffffff'
+
+/**
+ * TableRex status palette (D-101). `chipText` on `chipBg` must keep WCAG AA contrast (4.5:1); `fill` is the
+ * light tint behind dark text on the timeline.
+ */
 export const StatusMeta = Object.freeze({
   PENDING: {
     label: 'Pending',
-    color: 'amber-8',
-    textColor: 'black',
-    fill: '#fff8e1',
+    chipBg: '#f6d58e',
+    chipText: INK,
+    fill: '#fdf1d3',
     icon: 'hourglass_empty',
   },
-  HELD: { label: 'Held', color: 'deep-orange-10', fill: '#fbe9e7', icon: 'pause_circle' },
-  CONFIRMED: { label: 'Confirmed', color: 'primary', fill: '#e3f2fd', icon: 'event_available' },
-  CHECKED_IN: { label: 'Checked in', color: 'teal-8', fill: '#e0f2f1', icon: 'how_to_reg' },
-  SEATED: { label: 'Seated', color: 'positive', fill: '#e8f5e9', icon: 'event_seat' },
-  COMPLETED: { label: 'Completed', color: 'blue-grey-7', fill: '#f5f5f5', icon: 'task_alt' },
-  CANCELLED: { label: 'Cancelled', color: 'grey-7', fill: '#fafafa', icon: 'cancel' },
-  NO_SHOW: { label: 'No-show', color: 'negative', fill: '#ffebee', icon: 'person_off' },
+  HELD: {
+    label: 'Held',
+    chipBg: '#b04a30',
+    chipText: WHITE,
+    fill: '#fbe3db',
+    icon: 'pause_circle',
+  },
+  CONFIRMED: {
+    label: 'Confirmed',
+    chipBg: '#c9d6d9',
+    chipText: INK,
+    fill: '#e1e9eb',
+    icon: 'event_available',
+  },
+  CHECKED_IN: {
+    label: 'Checked in',
+    chipBg: '#f2c9a0',
+    chipText: INK,
+    fill: '#fbe6d0',
+    icon: 'how_to_reg',
+  },
+  SEATED: {
+    label: 'Seated',
+    chipBg: '#e06c4f',
+    chipText: INK,
+    fill: '#f8d5ca',
+    icon: 'event_seat',
+  },
+  COMPLETED: {
+    label: 'Completed',
+    chipBg: '#4a5d64',
+    chipText: WHITE,
+    fill: '#efe9e0',
+    icon: 'task_alt',
+  },
+  CANCELLED: {
+    label: 'Cancelled',
+    chipBg: '#616161',
+    chipText: WHITE,
+    fill: '#faf7f2',
+    icon: 'cancel',
+  },
+  NO_SHOW: {
+    label: 'No-show',
+    chipBg: '#b3261e',
+    chipText: WHITE,
+    fill: '#fbe7e4',
+    icon: 'person_off',
+  },
 })
 
 export const SourceLabels = Object.freeze({
@@ -58,7 +106,15 @@ export const BlockReasonLabels = Object.freeze({
 })
 
 export function statusMeta(status) {
-  return StatusMeta[status] ?? { label: status, color: 'grey-8', fill: '#ffffff', icon: 'help' }
+  return (
+    StatusMeta[status] ?? {
+      label: status,
+      chipBg: '#424242',
+      chipText: WHITE,
+      fill: '#ffffff',
+      icon: 'help',
+    }
+  )
 }
 
 export function isActiveStatus(status) {

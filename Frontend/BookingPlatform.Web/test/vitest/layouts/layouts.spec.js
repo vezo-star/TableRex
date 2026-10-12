@@ -49,7 +49,8 @@ describe('layouts', () => {
   it('DashboardLayout shows the product title, tenant and navigation toggle when signed in', async () => {
     const wrapper = await mountWithQuasar(DashboardLayout, { pinia: signedIn() })
 
-    expect(wrapper.text()).toContain('Booking Platform')
+    expect(wrapper.text()).toContain('TableRex')
+    expect(wrapper.find('[data-test="tablerex-logo"]').exists()).toBe(true)
     expect(wrapper.find('[data-test="drawer-toggle"]').exists()).toBe(true)
     expect(wrapper.find('[data-test="tenant-name"]').text()).toBe('Alpha Bistro')
   })
