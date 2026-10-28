@@ -1,0 +1,5 @@
+output/
+state.json
+*.webm
+*.mp4
+auth-*.json
