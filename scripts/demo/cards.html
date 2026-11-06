@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>TableRex card</title>
+  <style>
+    @font-face {
+      font-family: 'Cormorant Garamond';
+      src: url('fonts/CormorantGaramond-SemiBold.ttf') format('truetype');
+      font-weight: 600;
+    }
+    @font-face {
+      font-family: 'Cormorant Garamond';
+      src: url('fonts/CormorantGaramond-Bold.ttf') format('truetype');
+      font-weight: 700;
+    }
+    @font-face {
+      font-family: Outfit;
+      src: url('fonts/Outfit-Medium.ttf') format('truetype');
+      font-weight: 500;
+    }
+    @font-face {
+      font-family: Outfit;
+      src: url('fonts/Outfit-SemiBold.ttf') format('truetype');
+      font-weight: 600;
+    }
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      background: #0c1a1f;
+      color: #f7f1e8;
+      font-family: Outfit, sans-serif;
+      overflow: hidden;
+    }
+    .stage {
+      width: 100vw;
+      height: 100vh;
+      display: grid;
+      place-items: center;
+      background:
+        radial-gradient(ellipse at 50% 18%, rgba(224, 108, 79, 0.18), transparent 46%),
+        radial-gradient(ellipse at 50% 100%, rgba(36, 64, 74, 0.9), #0c1a1f 62%);
+    }
+    .card { text-align: center; max-width: 86vw; }
+    h1 {
+      font-family: 'Cormorant Garamond', serif;
+      font-weight: 600;
+      font-size: var(--h, 78px);
+      line-height: 1.05;
+      margin: 0.2em 0;
+      letter-spacing: -0.02em;
+      animation: pop 0.7s cubic-bezier(.2,.8,.2,1) both;
+    }
+    p {
+      font-size: var(--p, 32px);
+      font-weight: 500;
+      color: #c9d6d9;
+      margin: 0.4em auto 0;
+      max-width: 28ch;
+      animation: pop 0.8s 0.15s cubic-bezier(.2,.8,.2,1) both;
+    }
+    .accent { color: #e06c4f; }
+    .logo { animation: pop 0.6s both; margin-bottom: 8px; }
+    .word {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 54px;
+      letter-spacing: -0.02em;
+    }
+    .word b { color: #e06c4f; }
+    .phone {
+      width: min(420px, 46vw);
+      height: min(760px, 72vh);
+      background: #12232a;
+      border: 3px solid #24404a;
+      border-radius: 42px;
+      box-shadow: 0 30px 80px rgba(0,0,0,.45);
+      padding: 28px 18px 18px;
+      position: relative;
+      animation: buzz 1.6s ease-in-out 0.2s 1;
+    }
+    .notch { width: 120px; height: 18px; background: #0c1a1f; border-radius: 0 0 12px 12px; margin: -10px auto 16px; }
+    .bubble {
+      background: #1b3139;
+      border-radius: 18px 18px 18px 6px;
+      padding: 12px 14px;
+      margin: 10px 8px;
+      text-align: left;
+      font-size: 22px;
+      color: #f7f1e8;
+      opacity: 0;
+      animation: pop 0.45s forwards;
+    }
+    .bubble.me { background: #24404a; border-radius: 18px 18px 6px 18px; margin-left: 48px; }
+    .b1 { animation-delay: 0.25s; }
+    .b2 { animation-delay: 0.7s; }
+    .b3 { animation-delay: 1.15s; }
+    .from { font-size: 13px; letter-spacing: 0.14em; text-transform: uppercase; color: #e06c4f; font-weight: 600; }
+    .badge {
+      display: inline-block;
+      border: 1px solid #e06c4f;
+      color: #e06c4f;
+      border-radius: 999px;
+      padding: 10px 22px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      font-weight: 600;
+      font-size: 22px;
+      animation: pop 0.6s both;
+    }
+    @keyframes pop {
+      from { opacity: 0; transform: translateY(16px) scale(0.98); }
+      to { opacity: 1; transform: none; }
+    }
+    @keyframes buzz {
+      0%, 55%, 100% { transform: rotate(0); }
+      60% { transform: rotate(-1.4deg); }
+      64% { transform: rotate(1.4deg); }
+      68% { transform: rotate(-1deg); }
+      72% { transform: rotate(0.6deg); }
+    }
+    body.vertical { --h: 84px; --p: 34px; }
+    body.horizontal { --h: 72px; --p: 30px; }
+    body.horizontal .phone { width: 340px; height: 620px; }
+    .hook-wrap { display: flex; flex-direction: column; align-items: center; gap: 28px; }
+    body.horizontal .hook-wrap { flex-direction: row; gap: 64px; }
+  </style>
+</head>
+<body>
+  <div class="stage" id="stage"></div>
+  <script>
+    const params = new URLSearchParams(location.search)
+    const card = params.get('card') || 'end'
+    const layout = params.get('layout') || 'vertical'
+    document.body.classList.add(layout)
+    const logo = `
+      <div class="logo">
+        <svg width="84" height="84" viewBox="0 0 100 100" aria-hidden="true">
+          <rect width="100" height="100" rx="22" fill="#12232A"/>
+          <g transform="translate(4,2) scale(0.92)">
+            <rect x="26" y="28" width="46" height="52" rx="20" fill="#E06C4F"/>
+            <rect x="50" y="34" width="40" height="28" rx="11" fill="#E06C4F"/>
+            <path d="M58,56 L88,56" stroke="#12232A" stroke-width="2.4" stroke-linecap="round"/>
+            <path d="M61,56 l2.6,5 l2.6,-5 z M67.5,56 l2.6,5 l2.6,-5 z M74,56 l2.6,5 l2.6,-5 z M80.5,56 l2.6,5 l2.6,-5 z" fill="#F7F1E8"/>
+            <circle cx="58" cy="43" r="5.5" fill="#F7F1E8"/>
+            <circle cx="59.5" cy="43" r="2.6" fill="#12232A"/>
+            <circle cx="85" cy="41" r="1.8" fill="#12232A"/>
+            <rect x="8" y="70" width="84" height="9" rx="4.5" fill="#F7F1E8"/>
+            <rect x="38" y="61" width="16" height="9" rx="4.5" fill="#E06C4F" stroke="#12232A" stroke-width="1.8"/>
+            <circle cx="51" cy="72.5" r="2.4" fill="#E06C4F"/>
+            <circle cx="45.5" cy="72.5" r="2.4" fill="#E06C4F"/>
+            <rect x="20" y="78" width="6" height="14" rx="2" fill="#F7F1E8"/>
+            <rect x="74" y="78" width="6" height="14" rx="2" fill="#F7F1E8"/>
+          </g>
+        </svg>
+        <div class="word">Table<b>Rex</b></div>
+      </div>`
+    const cards = {
+      hook: `
+        <div class="hook-wrap">
+          <div class="phone" aria-hidden="true">
+            <div class="notch"></div>
+            <div class="bubble b1"><div class="from">New message</div>Table for 4 tonight?</div>
+            <div class="bubble me b2">Terrace or inside?</div>
+            <div class="bubble b3"><div class="from">New message</div>Is 7 still free??</div>
+          </div>
+          <h1>Still taking bookings<br>in <span class="accent">WhatsApp</span>?</h1>
+        </div>`,
+      title: `
+        ${logo}
+        <h1>TableRex</h1>
+        <p>Online bookings and a live floor view for KZN venues.</p>`,
+      deposits: `
+        ${logo}
+        <div class="badge">Deposits: coming soon</div>
+        <p>Hold the table now. Take the deposit in a later release.</p>`,
+      end: layout === 'horizontal'
+        ? `${logo}<h1>Free for 3 months,<br>no contract.</h1><p>Built in Durban for KZN venues.<br>Book a 15-min demo: tablerex.co.za</p>`
+        : `${logo}<h1>Built in Durban<br>for KZN venues.</h1><p>Book a 15-min demo: tablerex.co.za</p>`,
+    }
+    document.getElementById('stage').innerHTML = `<div class="card">${cards[card] || cards.end}</div>`
+  </script>
+</body>
+</html>
