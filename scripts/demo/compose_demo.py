@@ -15,7 +15,7 @@ import subprocess
 import wave
 from pathlib import Path
 
-RAW = Path(os.environ.get('DEMO_RAW_DIR', '/tmp/tablerex-demo-raw'))
+RAW = Path(os.environ.get('DEMO_RAW_DIR', '/tmp/tablerex-demo-raw-4k'))
 OUT = Path(os.environ.get('DEMO_OUT_DIR', '/opt/cursor/artifacts'))
 WORK = Path(os.environ.get('DEMO_WORK_DIR', '/tmp/tablerex-edit'))
 FONTS = Path(__file__).resolve().parent / 'fonts'
@@ -137,29 +137,93 @@ def caption_filter(name: str, text: str, dur: float, size: int, y: str) -> str:
     )
 
 
+# Finished files are published under OUT. That directory rejects anything over 100 MiB,
+# so a 64s 1080p film is held at 12.2 Mbps (still above the 12 Mbps floor) and the 4K
+# master is encoded at 46 Mbps, then split into parts that each fit.
+ARTIFACT_CAP = 99 * 1024 * 1024
+
+
+def x264(size: tuple[int, int], seconds: float = 20) -> list[str]:
+    """H.264 High, yuv420p, 30fps, CBR. CRF 16 of this static UI falls to a few
+    hundred kbps, so the rate is set explicitly and filler holds the floor."""
+    w, h = size
+    gop = ''
+    if w >= 3000 or h >= 3000:
+        rate, level = '46M', '5.1'
+        # Short GOP so the 4K master can be split on keyframes under the 100 MiB cap.
+        gop = ':keyint=48:min-keyint=48:scenecut=0'
+    elif w * h * seconds > 1920 * 1080 * 48:
+        rate, level = '12200k', '4.2'
+    else:
+        rate, level = '16M', '4.2'
+    return [
+        '-c:v', 'libx264', '-profile:v', 'high', '-level:v', level,
+        '-preset', 'medium',
+        '-b:v', rate, '-minrate', rate, '-maxrate', rate, '-bufsize', rate,
+        '-x264-params', f'nal-hrd=cbr:filler=1:aq-mode=3{gop}',
+        '-pix_fmt', 'yuv420p', '-r', str(FPS),
+    ]
+
+
 def make_segment(spec: dict) -> Path:
-    """spec: src, start, dur, out name, mode, caption, size (w,h), extra vf."""
+    """Downscale a 2× capture with lanczos. Wide shots in the vertical reel sit in a 16:9 panel."""
     dest = WORK / f"{spec['name']}.mp4"
     w, h = spec['size']
-    filters = [f"fps={FPS}", f"setpts=PTS-STARTPTS"]
-    if spec.get('vf'):
-        filters.append(spec['vf'])
-    filters.append(f"scale={w}:{h}:force_original_aspect_ratio=decrease")
-    filters.append(f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:color=0x0c1a1f")
-    filters.append('format=yuv420p')
+    dur = spec['dur']
+    cap = ''
     if spec.get('caption'):
-        filters.append(caption_filter(spec['name'], spec['caption'], spec['dur'], spec.get('csize', 54), spec.get('cy', 'h-150')))
-    filters.append(f"fade=t=in:st=0:d=0.18,fade=t=out:st={max(0, spec['dur'] - 0.22):.2f}:d=0.2")
-    run(
-        [
-            'ffmpeg', '-y', '-ss', f"{spec['start']:.3f}", '-t', f"{spec['dur']:.3f}",
+        cap = ',' + caption_filter(
+            spec['name'], spec['caption'], dur,
+            spec.get('csize', 54), spec.get('cy', 'h-150'),
+        )
+    fade = f",fade=t=in:st=0:d=0.18,fade=t=out:st={max(0, dur - 0.22):.2f}:d=0.2"
+    mask_fg = ''
+    if spec.get('mask') and spec.get('panel'):
+        # Source frames are 3840x2160. Cover the dev-only booking URL.
+        mask_fg = 'drawbox=x=470:y=190:w=1750:h=150:color=0xD7E4E7:t=fill,'
+    if spec.get('panel'):
+        # Full 16:9, edge to edge. zoompan reads the 3840-wide capture straight
+        # into the panel so the retina frames are not thrown away first.
+        zoom = spec.get('zoom', 0.0)
+        cx = spec.get('cx', 0.5)
+        cy = spec.get('cy_focus', 0.48)
+        frames = max(1, int(dur * FPS))
+        hold = int(spec.get('hold', 0))
+        if hold and zoom:
+            z = f"if(lt(on\\,{hold}),1,1+{zoom:.4f}*(on-{hold})/{max(1, frames - hold)})"
+        else:
+            z = f"1+{zoom:.4f}*on/{frames}"
+        panel_w, panel_h, panel_y = 1080, 608, 420
+        graph = (
+            f"[0:v]fps={FPS},setpts=PTS-STARTPTS,split[bg][fg];"
+            f"[bg]scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos,crop=1080:1920,"
+            f"gblur=sigma=24,eq=brightness=-0.42:saturation=0.85[bg2];"
+            f"[fg]{mask_fg}zoompan=z='{z}':x='(iw-iw/zoom)*{cx}':y='(ih-ih/zoom)*{cy}':d=1:s={panel_w}x{panel_h}:fps={FPS}[fg2];"
+            f"[bg2][fg2]overlay=(W-w)/2:{panel_y}{cap}{fade},setsar=1,format=yuv420p[vout]"
+        )
+        run([
+            'ffmpeg', '-y', '-ss', f"{spec['start']:.3f}", '-t', f"{dur:.3f}",
             '-i', str(spec['src']),
-            '-vf', ','.join(filters),
-            '-an', '-r', str(FPS),
-            '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-pix_fmt', 'yuv420p',
-            str(dest),
-        ]
+            '-filter_complex', graph, '-map', '[vout]', '-an', *x264(spec['size']), str(dest),
+        ])
+        return dest
+    mask = ''
+    if spec.get('mask'):
+        scale = h / 1080
+        mask = (
+            f",drawbox=x={int(248 * scale)}:y={int(108 * scale)}:w={int(1120 * scale)}:"
+            f"h={int(72 * scale)}:color=0xD7E4E7:t=fill"
+        )
+    vf = (
+        f"fps={FPS},setpts=PTS-STARTPTS,"
+        f"scale={w}:{h}:force_original_aspect_ratio=decrease:flags=lanczos,"
+        f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:color=0x0c1a1f{mask},setsar=1,format=yuv420p{cap}{fade}"
     )
+    run([
+        'ffmpeg', '-y', '-ss', f"{spec['start']:.3f}", '-t', f"{dur:.3f}",
+        '-i', str(spec['src']),
+        '-vf', vf, '-an', *x264(spec['size']), str(dest),
+    ])
     return dest
 
 
@@ -187,7 +251,7 @@ def concat_xfade(segments: list[Path], durs: list[float], dest: Path, size: tupl
             'ffmpeg', '-y', *inputs,
             '-filter_complex', ';'.join(parts),
             '-map', '[vout]',
-            '-r', str(FPS), '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-pix_fmt', 'yuv420p',
+            *x264(size, durs[0] + sum(d - XFADE for d in durs[1:])),
             str(dest),
         ]
     )
@@ -225,16 +289,6 @@ def mix_audio(video: Path, music: Path, whoosh: Path, duration: float, whoosh_at
     )
 
 
-def phone_vf() -> str:
-    # Playwright wrote the 430x932 viewport into the top-left of a 2x canvas.
-    return 'crop=430:932:0:0,scale=886:1920'
-
-
-def mask_localhost() -> str:
-    # Cover the dev-only public URL bar. The rest of the settings screen stays.
-    return 'drawbox=x=248:y=112:w=1080:h=64:color=0xD7E4E7:t=fill'
-
-
 def build(name: str, specs: list[dict], size: tuple[int, int]) -> float:
     music, whoosh = ensure_audio()
     segs = []
@@ -250,25 +304,75 @@ def build(name: str, specs: list[dict], size: tuple[int, int]) -> float:
     for dur in durs[:-1]:
         cursor += dur - XFADE
         whoosh_at.append(cursor)
-    dest = OUT / f'{name}.mp4'
-    mix_audio(silent, music, whoosh, total, whoosh_at, dest)
-    print(f'{dest} {total:.2f}s')
+    staged = WORK / f'{name}.mp4'
+    mix_audio(silent, music, whoosh, total, whoosh_at, staged)
+    publish(staged, OUT / f'{name}.mp4')
+    print(f'{name} {total:.2f}s')
     return total
 
 
+def integrated_lufs(path: Path) -> float | None:
+    proc = subprocess.run(
+        ['ffmpeg', '-hide_banner', '-i', str(path), '-af', 'ebur128', '-f', 'null', '-'],
+        capture_output=True, text=True,
+    )
+    measured = None
+    for line in proc.stderr.splitlines():
+        if 'I:' in line and 'LUFS' in line:
+            measured = float(line.split('I:', 1)[1].split('LUFS', 1)[0].strip())
+    return measured
+
+
+def settle_loudness(path: Path) -> None:
+    """Short cuts catch a louder slice of the same bed. Nudge them back to about -23 LUFS."""
+    probe = subprocess.run(
+        ['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', str(path)],
+        capture_output=True, text=True, check=True,
+    )
+    if float(probe.stdout.strip()) >= 25:
+        return
+    measured = integrated_lufs(path)
+    if measured is None:
+        return
+    delta = -23.0 - measured
+    if abs(delta) < 1.2:
+        return
+    tmp = path.with_suffix('.lvl.mp4')
+    run([
+        'ffmpeg', '-y', '-i', str(path), '-c:v', 'copy',
+        '-af', f'volume={delta:.2f}dB', '-c:a', 'aac', '-b:a', '160k',
+        '-movflags', '+faststart', str(tmp),
+    ])
+    tmp.replace(path)
+
+
+def publish(src: Path, dest: Path) -> None:
+    """Copy into the artifact dir. Files over the 100 MiB cap are split on keyframes."""
+    if src.stat().st_size <= ARTIFACT_CAP:
+        run(['ffmpeg', '-y', '-i', str(src), '-c', 'copy', '-movflags', '+faststart', str(dest)])
+        settle_loudness(dest)
+        print(f'  {dest.name} {dest.stat().st_size} bytes')
+        return
+    tmp_pattern = str(WORK / f'{dest.stem}_part%02d{dest.suffix}')
+    run([
+        'ffmpeg', '-y', '-i', str(src), '-c', 'copy', '-f', 'segment',
+        '-segment_time', '14', '-reset_timestamps', '1', tmp_pattern,
+    ])
+    lines = []
+    for part in sorted(WORK.glob(f'{dest.stem}_part*{dest.suffix}')):
+        out = dest.with_name(part.name)
+        run(['ffmpeg', '-y', '-i', str(part), '-c', 'copy', '-movflags', '+faststart', str(out)])
+        if out.stat().st_size > ARTIFACT_CAP:
+            raise SystemExit(f'{out.name} is {out.stat().st_size} bytes, over the artifact cap')
+        lines.append(f"file '{out.name}'")
+        print(f'  {out.name} {out.stat().st_size} bytes')
+    dest.with_name(dest.stem + '_concat.txt').write_text('\n'.join(lines) + '\n', encoding='utf-8')
+
+
 def export_raw() -> None:
-    crops = {
-        'v_guest': 'crop=430:932:0:0',
-        'v_rival': 'crop=430:932:0:0',
-    }
-    for src in sorted(RAW.glob('*.webm')):
+    for src in sorted(RAW.glob('*.mp4')):
         dest = OUT / f"raw_{src.stem}.mp4"
-        vf = crops.get(src.stem)
-        cmd = ['ffmpeg', '-y', '-i', str(src)]
-        if vf:
-            cmd += ['-vf', vf]
-        cmd += ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-pix_fmt', 'yuv420p', '-an', '-movflags', '+faststart', str(dest)]
-        run(cmd)
+        run(['ffmpeg', '-y', '-i', str(src), '-c', 'copy', '-movflags', '+faststart', str(dest)])
         print('raw', dest.name)
 
 
@@ -277,52 +381,56 @@ def main() -> None:
     WORK.mkdir(parents=True, exist_ok=True)
     v = (1080, 1920)
     h = (1920, 1080)
+    uhd = (3840, 2160)
 
+    # Wide UI stays a full 16:9 panel on the 9:16 frame (never sliced to fill the height).
+    # The floor holds the whole screen, then eases into the tables. End zoom still
+    # contains TR1–TR3, M2, M4, M6, V1 and V2.
     vertical = [
-        dict(name='v_hook', src=RAW / 'v_hook.webm', start=0.1, dur=3.0),
-        dict(name='v_book', src=RAW / 'v_guest.webm', start=2.6, dur=5.2, vf=phone_vf(), caption='Guests book online, 24/7', csize=58),
-        dict(name='v_confirm', src=RAW / 'v_guest.webm', start=7.6, dur=5.0, vf=phone_vf(), caption='Live availability. Instant confirmation.', csize=48),
-        dict(name='v_floor', src=RAW / 'v_floor.webm', start=6.5, dur=5.4, caption='Your team sees it on the live floor view', csize=46),
-        dict(name='v_checkin', src=RAW / 'v_floor.webm', start=12.6, dur=4.2, caption='Every section, one view', csize=54),
-        dict(name='v_taken', src=RAW / 'v_rival.webm', start=13.2, dur=5.6, vf=phone_vf(), caption='No double bookings. Ever.', csize=58),
-        dict(name='v_sections', src=RAW / 'v_sections.webm', start=1.3, dur=4.6, vf=mask_localhost(), caption='Terrace, Main and VIP', csize=58),
-        dict(name='v_deposits', src=RAW / 'v_deposits.webm', start=0.15, dur=4.0),
-        dict(name='v_end', src=RAW / 'v_end.webm', start=0.15, dur=4.9),
+        dict(name='v_hook', src=RAW / 'v_hook.mp4', start=0.15, dur=3.2),
+        dict(name='v_book', src=RAW / 'h_guest.mp4', start=1.4, dur=4.6, panel=True, zoom=0.06, caption='Guests book online, 24/7', csize=52),
+        dict(name='v_confirm', src=RAW / 'h_guest.mp4', start=6.4, dur=3.4, panel=True, zoom=0.05, caption='Live availability. Instant confirmation.', csize=44),
+        dict(name='v_floor', src=RAW / 'h_floor.mp4', start=0.4, dur=6.2, panel=True, zoom=0.40, hold=36, cx=0.46, cy_focus=0.50, caption='Your team sees it on the live floor view', csize=42),
+        dict(name='v_checkin', src=RAW / 'h_floor.mp4', start=9.0, dur=4.6, panel=True, caption='Checked in. Every section, one view', csize=42),
+        dict(name='v_taken', src=RAW / 'h_rival.mp4', start=6.0, dur=7.4, panel=True, zoom=0.06, caption='No double bookings. Ever.', csize=52),
+        dict(name='v_sections', src=RAW / 'h_sections.mp4', start=0.25, dur=4.4, panel=True, mask=True, zoom=0.04, caption='Terrace, Main and VIP', csize=52),
+        dict(name='v_deposits', src=RAW / 'v_deposits.mp4', start=0.15, dur=4.2),
+        dict(name='v_end', src=RAW / 'v_end.mp4', start=0.15, dur=5.2),
     ]
     horizontal = [
-        dict(name='h_title', src=RAW / 'h_title.webm', start=0.15, dur=5.0),
-        dict(name='h_guest', src=RAW / 'h_guest.webm', start=4.2, dur=10.2, caption='Guests book online. Confirmed instantly.', csize=52, cy='h-120'),
-        dict(name='h_list', src=RAW / 'h_list.webm', start=5.5, dur=7.5, caption="Tonight's bookings, as they land", csize=50, cy='h-110'),
-        dict(name='h_floor', src=RAW / 'h_floor.webm', start=7.2, dur=8.5, caption='Live floor. Every section, status colours.', csize=48, cy='h-110'),
-        dict(name='h_timeline', src=RAW / 'h_list.webm', start=21.6, dur=3.6, caption='Terrace, Main and VIP on one timeline', csize=48, cy='h-110'),
-        dict(name='h_taken', src=RAW / 'h_rival.webm', start=11.5, dur=7.2, caption='That time was just taken. Next slot is 21:00.', csize=46, cy='h-120'),
-        dict(name='h_settings', src=RAW / 'h_sections.webm', start=1.2, dur=7.6, vf=mask_localhost(), caption='Slot interval, turnover, hours, special days', csize=44, cy='h-110'),
-        dict(name='h_roles', src=RAW / 'h_staff.webm', start=0.8, dur=3.4, caption='Owners, managers, hosts. Each with a role.', csize=46, cy='h-110'),
-        dict(name='h_phone', src=RAW / 'h_staff.webm', start=4.6, dur=5.2, caption='A phone booking, added by the team, lands on the same list', csize=42, cy='h-110'),
-        dict(name='h_deposits', src=RAW / 'h_deposits.webm', start=0.2, dur=5.0),
-        dict(name='h_end', src=RAW / 'h_end.webm', start=0.2, dur=5.8),
+        dict(name='h_title', src=RAW / 'h_title.mp4', start=0.2, dur=5.1),
+        dict(name='h_guest', src=RAW / 'h_guest.mp4', start=1.2, dur=8.6, caption='Guests book online. Confirmed instantly.', csize=52, cy='h-120'),
+        dict(name='h_list', src=RAW / 'h_list.mp4', start=0.3, dur=2.3, caption="Tonight's bookings, as they land", csize=50, cy='h-110'),
+        dict(name='h_timeline', src=RAW / 'h_list.mp4', start=2.8, dur=2.8, caption='Terrace, Main and VIP on one timeline', csize=48, cy='h-110'),
+        dict(name='h_floor', src=RAW / 'h_floor.mp4', start=0.4, dur=8.2, caption='Live floor. Every section, status colours.', csize=48, cy='h-110'),
+        dict(name='h_check', src=RAW / 'h_floor.mp4', start=8.8, dur=4.9, caption='Checked in on the floor', csize=52, cy='h-110'),
+        dict(name='h_taken', src=RAW / 'h_rival.mp4', start=5.0, dur=8.8, caption='That time was just taken. Next slot is 21:00.', csize=46, cy='h-120'),
+        dict(name='h_settings', src=RAW / 'h_sections.mp4', start=0.2, dur=6.8, mask=True, caption='Slot interval, turnover, hours, special days', csize=44, cy='h-110'),
+        dict(name='h_roles', src=RAW / 'h_staff.mp4', start=0.2, dur=3.0, caption='Owners, managers, hosts. Each with a role.', csize=46, cy='h-110'),
+        dict(name='h_phone', src=RAW / 'h_staff.mp4', start=4.2, dur=5.8, caption='A phone booking, added by the team, lands on the same list', csize=42, cy='h-110'),
+        dict(name='h_deposits', src=RAW / 'h_deposits.mp4', start=0.2, dur=5.1),
+        dict(name='h_end', src=RAW / 'h_end.mp4', start=0.2, dur=6.0),
     ]
-    # Social cuts, 8-15s, same grade.
     cuts = {
         'cut_guest_books': [
-            dict(name='c_guest', src=RAW / 'h_guest.webm', start=4.4, dur=6.2, caption='Guests book online, 24/7', csize=52, cy='h-120'),
-            dict(name='c_confirm', src=RAW / 'h_guest.webm', start=10.6, dur=3.8, caption='Instant confirmation', csize=56, cy='h-120'),
+            dict(name='c_guest', src=RAW / 'h_guest.mp4', start=1.4, dur=5.0, caption='Guests book online, 24/7', csize=52, cy='h-120'),
+            dict(name='c_confirm', src=RAW / 'h_guest.mp4', start=6.4, dur=3.4, caption='Instant confirmation', csize=56, cy='h-120'),
         ],
         'cut_live_floor': [
-            dict(name='c_floor', src=RAW / 'h_floor.webm', start=7.4, dur=8.2, caption='Live floor view', csize=58, cy='h-110'),
-            dict(name='c_check', src=RAW / 'h_floor.webm', start=14.8, dur=3.2, caption='Checked in on the floor', csize=52, cy='h-110'),
+            dict(name='c_floor', src=RAW / 'h_floor.mp4', start=0.4, dur=7.4, caption='Live floor view', csize=58, cy='h-110'),
+            dict(name='c_check', src=RAW / 'h_floor.mp4', start=9.2, dur=4.4, caption='Checked in on the floor', csize=52, cy='h-110'),
         ],
         'cut_no_double_booking': [
-            dict(name='c_taken', src=RAW / 'h_rival.webm', start=10.4, dur=9.2, caption='No double bookings. Ever.', csize=54, cy='h-120'),
+            dict(name='c_taken', src=RAW / 'h_rival.mp4', start=4.5, dur=9.2, caption='No double bookings. Ever.', csize=54, cy='h-120'),
         ],
         'cut_every_section': [
-            dict(name='c_time', src=RAW / 'h_list.webm', start=21.5, dur=3.5, caption='Terrace, Main and VIP', csize=56, cy='h-110'),
-            dict(name='c_sec', src=RAW / 'h_sections.webm', start=1.4, dur=3.2, vf=mask_localhost(), caption='Every section, one view', csize=54, cy='h-110'),
-            dict(name='c_floor2', src=RAW / 'h_floor.webm', start=8.0, dur=4.0, caption='Pushed-together terrace tables', csize=48, cy='h-110'),
+            dict(name='c_time', src=RAW / 'h_list.mp4', start=2.8, dur=2.8, caption='Terrace, Main and VIP', csize=56, cy='h-110'),
+            dict(name='c_sec', src=RAW / 'h_sections.mp4', start=0.25, dur=3.2, mask=True, caption='Every section, one view', csize=54, cy='h-110'),
+            dict(name='c_floor2', src=RAW / 'h_floor.mp4', start=0.6, dur=4.2, caption='Pushed-together terrace tables', csize=48, cy='h-110'),
         ],
         'cut_phone_booking': [
-            dict(name='c_roles', src=RAW / 'h_staff.webm', start=0.7, dur=3.6, caption='Staff roles', csize=58, cy='h-110'),
-            dict(name='c_phone', src=RAW / 'h_staff.webm', start=4.4, dur=5.6, caption='Phone bookings land on the same list', csize=46, cy='h-110'),
+            dict(name='c_roles', src=RAW / 'h_staff.mp4', start=0.2, dur=3.2, caption='Staff roles', csize=58, cy='h-110'),
+            dict(name='c_phone', src=RAW / 'h_staff.mp4', start=4.4, dur=5.6, caption='Phone bookings land on the same list', csize=46, cy='h-110'),
         ],
     }
 
@@ -331,6 +439,17 @@ def main() -> None:
         build('demo_reel_vertical', vertical, v)
     if not only or 'horizontal' in only:
         build('demo_horizontal', horizontal, h)
+    if not only or '4k' in only:
+        fourk = []
+        for spec in horizontal:
+            item = {**spec, 'name': 'k_' + spec['name']}
+            if 'csize' in item:
+                item['csize'] = int(item['csize'] * 2)
+            cy = item.get('cy')
+            if isinstance(cy, str) and cy.startswith('h-'):
+                item['cy'] = f"h-{int(cy[2:]) * 2}"
+            fourk.append(item)
+        build('demo_horizontal_4k', fourk, uhd)
     for cut_name, specs in cuts.items():
         if not only or cut_name in only or 'cuts' in only:
             build(cut_name, specs, h)
